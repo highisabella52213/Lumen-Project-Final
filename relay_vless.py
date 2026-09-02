@@ -949,7 +949,13 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
                 raise error
 
         await io.flush()
-        asyncio.create_task(save_state())
+        try:
+            await save_state(rotate=False)
+        except TypeError as exc:
+            # Compatibility with embedded/test callbacks that predate v19.
+            if "rotate" not in str(exc):
+                raise
+            await save_state()
 
     except WebSocketDisconnect:
         pass

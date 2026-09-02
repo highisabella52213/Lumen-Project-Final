@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import hashlib,os,sys
+import os,sys
 from datetime import datetime,timezone
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -12,14 +12,14 @@ for bad in ('ftp://host:21','http://host','http://host:80/path'):
  try:r.validate_url(bad);raise AssertionError(bad)
  except ValueError:pass
 assert r.REFRESH_SECONDS==7200
-secret='ENV123-a-long-random-secret';digest=hashlib.sha256(secret.encode()).hexdigest();old_hash=r.MANUAL_REFRESH_TOKEN_SHA256;old={n:os.environ.get(n) for n in r.MANUAL_REFRESH_ENV_ALIASES};r.MANUAL_REFRESH_TOKEN_SHA256=digest
+old={n:os.environ.get(n) for n in r.MANUAL_REFRESH_ENV_ALIASES}
 for n in r.MANUAL_REFRESH_ENV_ALIASES:os.environ.pop(n,None)
-os.environ[r.MANUAL_REFRESH_ENV_NAME]=' “'+secret+'” ';assert r.manual_refresh_enabled() and r.manual_refresh_state()['enabled']
-os.environ[r.MANUAL_REFRESH_ENV_NAME]='wrong';os.environ[r.MANUAL_REFRESH_ENV_ALIASES[1]]=digest.upper();assert r.manual_refresh_enabled()
-os.environ[r.MANUAL_REFRESH_ENV_ALIASES[1]]='wrong';assert not r.manual_refresh_enabled()
+os.environ[r.MANUAL_REFRESH_ENV_NAME]=' “installer-generated-secret-1234567890” ';assert r.manual_refresh_enabled() and r.manual_refresh_state()['enabled'] and r.manual_refresh_state()['installer_managed']
+os.environ[r.MANUAL_REFRESH_ENV_NAME]='short';assert not r.manual_refresh_enabled()
+os.environ.pop(r.MANUAL_REFRESH_ENV_NAME,None);os.environ[r.MANUAL_REFRESH_ENV_ALIASES[1]]='alias-generated-secret-1234567890';assert r.manual_refresh_enabled()
 old_id,old_secret=r.S3_ACCESS_KEY_ID,r.S3_SECRET_ACCESS_KEY;r.S3_ACCESS_KEY_ID='TESTKEY';r.S3_SECRET_ACCESS_KEY='TESTSECRET';req=r._signed_request(datetime(2026,9,2,8,0,0,tzinfo=timezone.utc));assert req.full_url=='https://s3.us-west-2.idrivee2.com/bt2/www-32k-ort-org-021/proxy.txt';auth=req.headers['Authorization'];assert 'Credential=TESTKEY/20260902/us-west-2/s3/aws4_request' in auth and 'TESTSECRET' not in auth
-r.S3_ACCESS_KEY_ID,r.S3_SECRET_ACCESS_KEY=old_id,old_secret;r.MANUAL_REFRESH_TOKEN_SHA256=old_hash
+r.S3_ACCESS_KEY_ID,r.S3_SECRET_ACCESS_KEY=old_id,old_secret
 for n,v in old.items():
  if v is None:os.environ.pop(n,None)
  else:os.environ[n]=v
-print('private repository: parse=OK redaction=OK interval=2h manual-aliases=OK quotes=OK sigv4=OK')
+print('private repository: parse=OK redaction=OK interval=2h installer-secret=OK alias=OK quotes=OK sigv4=OK')

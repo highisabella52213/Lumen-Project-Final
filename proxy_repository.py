@@ -17,15 +17,14 @@ S3_ENDPOINT = "https://s3.us-west-2.idrivee2.com"
 S3_REGION = "us-west-2"
 S3_BUCKET = "bt2"
 S3_OBJECT_KEY = "www-32k-ort-org-021/proxy.txt"
-S3_ACCESS_KEY_ID = "41DUl3Aw2SiWuFW2OZ9P"
-S3_SECRET_ACCESS_KEY = "aID0sUgRZPle6RmGsxbOaULOwwYpACBMAs39vkjH"
+S3_ACCESS_KEY_ID = "KEY_ID"
+S3_SECRET_ACCESS_KEY = "SECRET_ACCESS"
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Railway: set PROXY_REPOSITORY_MANUAL_REFRESH_KEY to your long random secret.
-# Store only its SHA-256 below; generate it with tools/hash_manual_refresh_key.py.
+# Railway: the installer generates a long random enablement secret.
+# The refresh endpoint still requires an authenticated admin session.
 MANUAL_REFRESH_ENV_NAME = "PROXY_REPOSITORY_MANUAL_REFRESH_KEY"
 MANUAL_REFRESH_ENV_ALIASES = (MANUAL_REFRESH_ENV_NAME, "ENV_SECRET_KEY_TO_BUTTON_ON_N")
-MANUAL_REFRESH_TOKEN_SHA256 = "78865b831eb56b71a96e907f7914d37e3934a8aec408882f82a8eb24635d6c7e"
 
 FETCH_TIMEOUT = 10
 REFRESH_SECONDS = 2 * 60 * 60
@@ -71,29 +70,22 @@ def _clean_secret(value: str) -> str:
 
 
 def manual_refresh_enabled() -> bool:
-    expected = _clean_secret(MANUAL_REFRESH_TOKEN_SHA256).lower()
-    if not re.fullmatch(r"[0-9a-f]{64}", expected):
-        return False
+    # The value is never accepted from a request; its presence only enables the
+    # admin-only action. Requiring a strong generated value avoids accidental
+    # activation while allowing every installation to have a unique secret.
     for name in MANUAL_REFRESH_ENV_ALIASES:
         value = _clean_secret(os.environ.get(name, ""))
-        if not value:
-            continue
-        # Accept the documented raw secret and, for deployment ergonomics, the
-        # digest itself. Both comparisons are constant-time.
-        actual = hashlib.sha256(value.encode()).hexdigest()
-        if hmac.compare_digest(actual, expected) or hmac.compare_digest(value.lower(), expected):
+        if len(value) >= 24 and not any(ord(ch) < 32 for ch in value):
             return True
     return False
 
 def manual_refresh_state() -> dict:
-    expected = _clean_secret(MANUAL_REFRESH_TOKEN_SHA256).lower()
     present = any(bool(_clean_secret(os.environ.get(name, ""))) for name in MANUAL_REFRESH_ENV_ALIASES)
     return {
         "enabled": manual_refresh_enabled(),
         "env_present": present,
-        "hash_configured": bool(re.fullmatch(r"[0-9a-f]{64}", expected)),
+        "installer_managed": True,
     }
-
 
 def validate_url(value: str) -> str:
     parsed = urlsplit(str(value or "").split("#", 1)[0].strip())

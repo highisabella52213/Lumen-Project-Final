@@ -52,7 +52,7 @@ try:
     assert Server.ran
     assert module.PROTOCOLS == ('vless-ws',)
 
-    # Address is the network dial target; Host/SNI remain the TLS routing name.
+    # Address, WebSocket Host, and TLS SNI are independent.
     from urllib.parse import urlsplit, parse_qs, unquote
     uid = "11111111-2222-3333-4444-555555555555"
     ip_link = module.generate_vless_link(uid, "app.example.com", address="104.16.1.1")
@@ -63,7 +63,7 @@ try:
 
     custom_link = module.generate_vless_link(uid, "app.example.com", address="104.16.1.1", sni="front.example.org")
     custom_qs = parse_qs(urlsplit(custom_link).query)
-    assert custom_qs["host"] == ["front.example.org"] and custom_qs["sni"] == ["front.example.org"]
+    assert custom_qs["host"] == ["app.example.com"] and custom_qs["sni"] == ["front.example.org"]
 
     ipv6_link = module.generate_vless_link(uid, "app.example.com", address="2606:4700::1")
     assert "@[2606:4700::1]:443?" in ipv6_link
@@ -72,7 +72,7 @@ try:
 
     domain_link = module.generate_vless_link(uid, "app.example.com", address="edge.example.net")
     domain_qs = parse_qs(urlsplit(domain_link).query)
-    assert domain_qs["host"] == ["edge.example.net"] and domain_qs["sni"] == ["edge.example.net"]
+    assert domain_qs["host"] == ["app.example.com"] and domain_qs["sni"] == ["edge.example.net"]
 
     remark_link = module.vless_link_for_link({"label":"Internal label","remark":"Visible client remark","protocol":"vless-ws"}, uid, "app.example.com")
     assert unquote(urlsplit(remark_link).fragment) == "Visible client remark"

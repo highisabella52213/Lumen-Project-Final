@@ -1051,7 +1051,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;ba
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Lumen Relay v16 · command rail + route studio
+   Lumen Relay v19 · command rail + route studio
    A second expressive composition, intentionally unlike the v11 sidebar.
    ═══════════════════════════════════════════════════════════════════════════ */
 :root{--command-rail-w:108px;--v12-card-gap:18px}
@@ -1078,6 +1078,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 @media(max-width:1199px){.cfg-grid{grid-template-columns:1fr!important}.create-panel{grid-template-columns:230px minmax(0,1fr)!important}.route-actions{grid-template-columns:1fr 1fr repeat(4,48px)}}
 @media(max-width:900px){.sidebar{position:fixed!important;left:10px!important;right:10px!important;top:auto!important;bottom:10px!important;width:auto!important;height:84px!important;min-height:0!important;border-radius:28px!important;flex-direction:row!important;z-index:220!important}.logo,.sb-foot{display:none!important}.nav-wrap{width:100%!important;flex-direction:row!important;overflow-x:auto!important;overflow-y:hidden!important;padding:8px!important;gap:4px!important}.nav-it{min-width:82px!important;min-height:66px!important}.nav-it.on{border-radius:20px 20px 8px 20px!important}.main{margin-right:0!important;padding:92px 16px 126px!important}.mob-top{display:flex!important;top:10px!important;left:10px!important;right:10px!important;height:64px!important;border:1px solid var(--md-sys-color-outline-variant)!important;border-radius:24px!important;background:color-mix(in srgb,var(--md-sys-color-surface-container) 92%,transparent)!important;backdrop-filter:blur(20px)!important}.menu-btn{display:none!important}.topbar{position:relative!important;top:auto!important}.create-panel{grid-template-columns:1fr!important}.cp-head{grid-column:1!important;grid-row:auto!important;min-height:220px!important;border-radius:30px 30px 0 0!important}.cp-head-title{max-width:none!important}.cp-body{grid-column:1!important}.tb-sub{margin-inline-start:0!important}}
 @media(max-width:639px){.cp-body{grid-template-columns:1fr!important;padding:14px!important}.create-panel .cp-body>.cp-block,.create-panel .cp-block,.create-panel .endpoint-studio,.create-panel .cp-footer{grid-column:1!important}.cp-footer{grid-template-columns:1fr!important}.cp-submit-btn{width:100%!important}.route-network{grid-template-columns:1fr 20px 1fr!important}.route-port{grid-column:1/-1;border-inline-start:0;border-top:1px solid var(--md-sys-color-outline-variant);padding:10px 0 0}.route-data{grid-template-columns:1fr 1fr!important}.route-usage{grid-column:1/-1}.route-fact:nth-child(2){border-inline-start:0;padding-inline-start:0}.route-actions{grid-template-columns:1fr 1fr repeat(2,48px)!important}.route-action.compact:nth-last-child(-n+2){grid-row:2}.route-action span{font-size:.67rem}.route-head{padding:18px}.endpoint-grid{grid-template-columns:1fr!important}.endpoint-preview>i{transform:rotate(90deg)!important}.main{padding-left:10px!important;padding-right:10px!important}.topbar{padding:14px!important}.tb-title{font-size:1.3rem!important}}
+
+.update-available-btn{min-height:44px;border:0;border-radius:999px;padding:0 16px;align-items:center;gap:8px;background:var(--md-sys-color-tertiary-container);color:var(--md-sys-color-on-tertiary-container);font:750 .76rem var(--md-ref-typeface-plain);cursor:pointer;animation:update-pulse 2.4s ease-in-out infinite}.update-available-btn i{font-size:18px}@keyframes update-pulse{50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--md-sys-color-tertiary) 10%,transparent)}}
 
 </style>
 </head>
@@ -1209,7 +1211,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <button class="sb-close" id="close-sb"><i class="ti ti-x"></i></button>
   <div class="logo">
     <div class="logo-img"><i class="ti ti-shield-bolt"></i></div>
-    <div><div class="logo-name">Lumen Relay</div><div class="logo-sub">Command Console · v16</div></div>
+    <div><div class="logo-name">Lumen Relay</div><div class="logo-sub">Command Console · v19</div></div>
   </div>
   <nav class="nav-wrap" aria-label="Workspace navigation">
     <div class="nav-sec">Workspace</div>
@@ -1240,6 +1242,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <div class="tb-right">
       <span class="badge bg-green"><span class="dot dg pulse"></span> Active</span>
       <span class="badge bg-blue" id="uptime-badge">—</span>
+      <button class="update-available-btn" id="update-available-btn" style="display:none" onclick="applyLatestUpdate()"><i class="ti ti-download"></i><span>Update to new version</span></button>
       <button class="btn btn-p btn-sm" onclick="refreshAll()"><i class="ti ti-refresh"></i> Refresh</button>
     </div>
   </div>
@@ -1271,7 +1274,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="card-title"><i class="ti ti-activity"></i> Service status</div>
       <div class="sr"><span class="sr-k"><i class="ti ti-shield-check"></i> UUID Auth</span><span class="sr-v" style="color:var(--green-t)">● Active · strict</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-circle-check"></i> VLESS / WS Tunnel</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
-      <div class="sr"><span class="sr-k"><i class="ti ti-folders"></i> Sub Groups</span><span class="sr-v" style="color:var(--green-t)">● Active v16</span></div>
+      <div class="sr"><span class="sr-k"><i class="ti ti-folders"></i> Sub Groups</span><span class="sr-v" style="color:var(--green-t)">● Active v19</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-rss"></i> Subscription API</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-clock"></i> Uptime</span><span class="sr-v" id="uptime-inline">—</span></div>
       <div class="sr" style="flex-direction:column;align-items:flex-start;gap:4px">
@@ -1285,7 +1288,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
   </div>
   <div class="dash-footer">
-    <span class="df-text">Lumen Relay · Version 16.0</span>
+    <span class="df-text">Lumen Relay · Version 19.0</span>
     
   </div>
 </section>
@@ -1313,7 +1316,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <div class="cp-mini-row">
             <input class="cp-input-full" id="nl-note" placeholder="Private note (optional)">
           </div>
-          <div class="field-caption">Label is for the panel. Remark is the exact name shown inside the client app.</div>
+          <div class="cp-mini-row">
+            <input class="cp-input-full endpoint-ltr" id="nl-uuid" maxlength="36" autocomplete="off" spellcheck="false" placeholder="Custom UUID (optional — auto-generated when empty)">
+          </div>
+          <div class="field-caption">Label is for the panel. Remark is shown in the client. UUID can be supplied once at creation or left empty for secure automatic generation.</div>
         </div>
         <div class="cp-block">
           <div class="cp-block-label"><i class="ti ti-folders"></i> Sub group & expiry</div>
@@ -1394,6 +1400,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <div><span>Dial</span><code id="endpoint-preview-address">current service</code></div>
           <i class="ti ti-arrow-right"></i>
           <div><span>TLS identity</span><code id="endpoint-preview-sni">current service</code></div>
+          <i class="ti ti-lock"></i>
+          <div><span>Transport Host · fixed</span><code id="endpoint-preview-host">current service</code></div>
         </div>
       </div>
       <div class="cp-block config-proxy-studio"><div class="config-proxy-head"><div><div class="cp-block-label"><i class="ti ti-world-cog"></i> Exit IP settings</div><div class="endpoint-studio-sub">Choose a managed HTTP, HTTPS, or SOCKS5 proxy for this config only.</div></div><div class="config-proxy-actions"><span class="config-scope-badge"><i class="ti ti-user-shield"></i> Only this config</span><button class="repository-refresh-btn" id="proxy-recheck-btn" style="display:none" onclick="refreshProxyCatalogNow()"><i class="ti ti-refresh"></i><span>Recheck now</span></button></div></div><div class="config-proxy-grid"><div class="proxy-mode-card"><label>Connection mode</label><select class="cp-input-full fs" id="nl-exit-mode" onchange="syncExitProxy('nl')"><option value="direct">Direct — safest default</option><option value="repository">Managed proxy repository</option><option value="custom">Custom proxy — unsafe</option></select></div><div class="config-proxy-fields" id="nl-repository-fields" style="display: none"><div><label>Managed proxy</label><select class="cp-input-full fs" id="nl-proxy-id"><option value="">Loading managed proxies…</option></select></div><div class="managed-safe"><i class="ti ti-shield-check"></i> Managed and verified</div></div><div class="config-proxy-fields" id="nl-custom-fields" style="display: none"><div><label>Custom proxy URL</label><input class="cp-input-full endpoint-ltr" id="nl-custom-proxy" placeholder="socks5://user:pass@host:port"></div><div class="custom-danger"><i class="ti ti-alert-triangle"></i> Warning: leaving the managed safety boundary. This proxy may expose traffic or stop the config.</div></div></div><div class="proxy-safe-note"><i class="ti ti-eye-off"></i><span>Managed endpoints stay server-side. Only flag, country, protocol, and health are shown.</span></div></div>
@@ -1601,7 +1609,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
     <div class="card">
       <div class="card-title"><i class="ti ti-shield-check"></i> Access control</div>
-      <div class="sr"><span class="sr-k"><i class="ti ti-id-badge"></i> UUID Auth strict</span><span class="sr-v" style="color:var(--green-t)">● Active v16</span></div>
+      <div class="sr"><span class="sr-k"><i class="ti ti-id-badge"></i> UUID Auth strict</span><span class="sr-v" style="color:var(--green-t)">● Active v19</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-toggle-right"></i> Enable / disable config</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-gauge"></i> Traffic quota</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-calendar-x"></i> Expiry date</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
@@ -1648,10 +1656,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
       <div class="srv-tiles">
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-route"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Default port</div><div class="srv-tile-val">443 (TLS) · can be overridden per config</div></div></div>
-        <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-versions"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Version</div><div class="srv-tile-val">v16.0</div></div></div>
+        <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-versions"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Version</div><div class="srv-tile-val">v19.0</div></div></div>
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-brand-fastapi"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Framework</div><div class="srv-tile-val">FastAPI + Uvicorn</div></div></div>
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-cloud"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Platform</div><div class="srv-tile-val">Railway</div></div></div>
         <div class="srv-tile" style="grid-column:1/-1"><div class="srv-tile-icon"><i class="ti ti-device-floppy"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Storage</div><div class="srv-tile-val">JSON File (/data)</div></div></div>
+        
       </div>
     </div>
     <div class="pw-panel">
@@ -1946,7 +1955,41 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Managed endpoints stay server-side. Only flag, country, protocol, and health are shown.": "آدرس‌های مدیریت‌شده فقط در سرور می‌مانند؛ فقط پرچم، کشور، پروتکل و سلامت نمایش داده می‌شود.",
   "Recheck now": "بررسی جدید",
   "Repository checked again": "مخزن دوباره بررسی شد",
-  "Refresh failed": "بررسی جدید ناموفق بود"
+  "Refresh failed": "بررسی جدید ناموفق بود",
+  "Custom UUID (optional — auto-generated when empty)": "UUID سفارشی (اختیاری — در صورت خالی بودن خودکار ساخته می‌شود)",
+  "Transport Host · fixed": "Host ترابرد · ثابت",
+  "Update to new version": "آپدیت به نسخه جدید",
+  "Version updates": "به‌روزرسانی نسخه",
+  "Configure secure updates": "تنظیم آپدیت امن",
+  "Secure version updates": "به‌روزرسانی امن نسخه",
+  "One-time setup for fork synchronization and Railway deployment": "تنظیم یک‌باره برای همگام‌سازی فورک و دیپلوی Railway",
+  "Checking version…": "در حال بررسی نسخه…",
+  "Publisher repository": "ریپازیتوری منتشرکننده",
+  "Your connected fork": "فورک متصل شما",
+  "Fork branch": "شاخه فورک",
+  "Railway account token": "توکن اکانت Railway",
+  "GitHub fine-grained token": "توکن Fine-grained گیت‌هاب",
+  "Reset setup": "پاک‌کردن تنظیمات",
+  "Save and verify": "ذخیره و بررسی",
+  "Updater configured": "آپدیتر تنظیم شده",
+  "Complete one-time setup to enable future updates.": "برای فعال‌شدن آپدیت‌های بعدی، تنظیم یک‌باره را کامل کنید.",
+  "Remove saved update credentials?": "اطلاعات ذخیره‌شده آپدیت حذف شود؟",
+  "Sync your fork and deploy the latest release now?": "فورک همگام و آخرین نسخه همین حالا دیپلوی شود؟",
+  "Update setup verified": "تنظیمات آپدیت تأیید شد",
+  "Update setup removed": "تنظیمات آپدیت حذف شد",
+  "Update deployment started": "دیپلوی نسخه جدید آغاز شد",
+  "Already on latest version": "هم‌اکنون روی آخرین نسخه هستید",
+  "Publisher repository · optional": "ریپازیتوری منتشرکننده · اختیاری",
+  "Auto-detected from fork parent": "تشخیص خودکار از فورک",
+  "Leave empty to detect the upstream repository automatically from your fork.": "برای تشخیص خودکار ریپازیتوری اصلی از روی فورک، خالی بگذارید.",
+  "Label is for the panel. Remark is shown in the client. UUID can be supplied once at creation or left empty for secure automatic generation.": "برچسب فقط برای پنل است، Remark در کلاینت دیده می‌شود و UUID را می‌توانید وارد کنید یا برای ساخت امن خودکار خالی بگذارید.",
+  "Tokens are encrypted before storage, never returned to the browser, and never written to logs. A persistent Railway Volume is required to keep them across deployments.": "توکن‌ها پیش از ذخیره رمزگذاری می‌شوند، هرگز به مرورگر برنمی‌گردند و در لاگ نوشته نمی‌شوند. برای ماندگاری آن‌ها میان دیپلوی‌ها، Volume دائمی Railway لازم است.",
+  "Leave empty to keep saved token": "برای نگه‌داشتن توکن ذخیره‌شده خالی بگذارید",
+  "Created at railway.com/account/tokens. This is a broad credential; use a dedicated token and rotate it if exposed.": "از railway.com/account/tokens ساخته می‌شود. این دسترسی گسترده است؛ توکن اختصاصی بسازید و در صورت افشا فوراً آن را تغییر دهید.",
+  "Required because Railway cannot modify a GitHub fork. Grant repository Contents write access only to this fork.": "ضروری است چون Railway نمی‌تواند فورک گیت‌هاب را تغییر دهد. دسترسی نوشتن Contents را فقط برای همین فورک بدهید.",
+  "Version 19.1.0 is ready. Your fork will be synced before Railway deploys it.": "نسخه 19.1.0 آماده است؛ ابتدا فورک همگام و سپس روی Railway دیپلوی می‌شود.",
+  "Synchronizing fork and starting Railway deployment…": "در حال همگام‌سازی فورک و شروع دیپلوی Railway…",
+  "Deployment started. This panel may reconnect during the update.": "دیپلوی شروع شد؛ ممکن است پنل هنگام آپدیت دوباره متصل شود."
 }</script>
 <script>
 const I18N_FA=JSON.parse(document.getElementById('dashboard-i18n').textContent);
@@ -1973,7 +2016,7 @@ function applyLanguage(){
   const l=document.getElementById('lang-label');if(l)l.textContent=uiLang==='fa'?'English':'فارسی';
   const mob=document.getElementById('lang-mob-btn');if(mob)mob.title=uiLang==='fa'?'English':'فارسی';
 }
-function toggleLanguage(){uiLang=uiLang==='en'?'fa':'en';localStorage.setItem('lumen-ui-lang',uiLang);applyLanguage();applyTheme(isDark)}
+function toggleLanguage(){uiLang=uiLang==='en'?'fa':'en';localStorage.setItem('lumen-ui-lang',uiLang);applyLanguage();applyTheme(isDark);if(typeof loadUpdateStatus==='function')loadUpdateStatus(false)}
 const _i18nObserver=new MutationObserver(entries=>entries.forEach(e=>e.addedNodes.forEach(n=>{if(n.nodeType===1)translateTree(n);else if(n.nodeType===3&&n.parentElement)translateTree(n.parentElement)})));
 let isDark=localStorage.getItem('x4g-theme')!=='light';
 function applyTheme(dark){
@@ -2014,6 +2057,22 @@ async function authF(url,opts={}){
   const r=await fetch(url,opts);
   if(r.status===401){location.href='/login';throw new Error('unauthorized')}
   return r;
+}
+
+/* ===== Installer-provisioned version updates (no token UI) ===== */
+let updateReleaseState={};
+async function loadUpdateStatus(){
+  const top=document.getElementById('update-available-btn');
+  try{
+    const r=await authF('/api/update/status');const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not check version');
+    updateReleaseState=d;const ready=Boolean(d.available&&d.configured);top.style.display=ready?'inline-flex':'none';
+    if(ready)top.querySelector('span').textContent=(uiLang==='fa'?'آپدیت به نسخه ':'Update to v')+d.latest_version;
+  }catch(e){if(top)top.style.display='none'}
+}
+async function applyLatestUpdate(){
+  if(!confirm(uiLang==='fa'?'فورک همگام و نسخه جدید روی Railway دیپلوی شود؟':'Sync your fork and deploy the latest release now?'))return;
+  const b=document.getElementById('update-available-btn');if(b)b.disabled=true;
+  try{const r=await authF('/api/update/apply',{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Update failed');if(d.started){toast(uiLang==='fa'?'دیپلوی نسخه جدید آغاز شد':'Update deployment started','ok');setTimeout(()=>location.reload(),12000)}else{toast(uiLang==='fa'?'همین حالا آخرین نسخه نصب است':'Already on latest version','ok');await loadUpdateStatus()}}catch(e){toast(e.message||'Update failed','err');await loadUpdateStatus()}finally{if(b)b.disabled=false}
 }
 
 /* ===== Managed proxy repository per config ===== */
@@ -2150,6 +2209,7 @@ function updateEndpointPreview(){
   const sni=explicitSni||(isIpAddressPreview(address)?(endpointCatalog.default_sni||location.hostname):address);
   document.getElementById('endpoint-preview-address').textContent=address||'—';
   document.getElementById('endpoint-preview-sni').textContent=sni||'—';
+  document.getElementById('endpoint-preview-host').textContent=endpointCatalog.transport_host||endpointCatalog.service_host||location.hostname;
   const custom=['address','sni'].some(k=>document.getElementById('nl-'+k).value==='__custom__');
   const badge=document.getElementById('endpoint-status');
   badge.className='endpoint-status'+(custom?' custom':'');
@@ -2242,6 +2302,7 @@ async function createLink(){
   const exp=document.getElementById('nl-exp').value;
   const note=document.getElementById('nl-note').value.trim();
   const remark=document.getElementById('nl-remark').value.trim()||label;
+  const uuid=document.getElementById('nl-uuid').value.trim();
   const sub_id=document.getElementById('nl-sub').value||null;
   const protocol=document.getElementById('nl-proto').value||'vless-ws';
   const fingerprint=document.getElementById('nl-fp').value||'chrome';
@@ -2253,10 +2314,10 @@ async function createLink(){
   const {address,sni}=selectedCreateEndpoints();
   const {exit_proxy_mode,proxy_id,custom_proxy}=exitProxyValues('nl');
   try{
-    const r=await authF('/api/links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,remark,limit_value:val||0,limit_unit:unit,expires_days:exp||0,note,sub_id,protocol,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit,address,sni,exit_proxy_mode,proxy_id,custom_proxy})});
+    const r=await authF('/api/links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,remark,limit_value:val||0,limit_unit:unit,expires_days:exp||0,note,sub_id,protocol,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit,address,sni,exit_proxy_mode,proxy_id,custom_proxy,uuid})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.detail||'Could not create config');
-    ['nl-label','nl-remark','nl-val','nl-exp','nl-note','nl-alpn'].forEach(id=>document.getElementById(id).value='');
+    ['nl-label','nl-remark','nl-val','nl-exp','nl-note','nl-uuid','nl-alpn'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('nl-port').value='443';
     document.getElementById('nl-iplimit').value='0';
     document.getElementById('nl-speed').value='0';
@@ -2690,8 +2751,9 @@ document.addEventListener('DOMContentLoaded',async()=>{
   initCharts();
   document.getElementById('set-host').textContent=location.host;
   document.getElementById('sub-all-url')&&(document.getElementById('sub-all-url').textContent=location.protocol+'//'+location.host+'/sub-all');
-  fetchStats();fetchDefaultVless();loadEndpointChoices();loadProxyCatalog();loadLinks();loadSubs();
+  fetchStats();fetchDefaultVless();loadEndpointChoices();loadProxyCatalog();loadLinks();loadSubs();loadUpdateStatus(true);
   setInterval(fetchStats,4000);
+  setInterval(()=>loadUpdateStatus(false),15*60*1000);
   setInterval(()=>{
     if(document.getElementById('pg-links').classList.contains('on'))loadLinks();
     if(document.getElementById('pg-subgroups').classList.contains('on'))loadSubs();
