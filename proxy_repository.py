@@ -17,8 +17,8 @@ S3_ENDPOINT = "https://s3.us-west-2.idrivee2.com"
 S3_REGION = "us-west-2"
 S3_BUCKET = "bt2"
 S3_OBJECT_KEY = "www-32k-ort-org-021/proxy.txt"
-S3_ACCESS_KEY_ID = "KEY_ID"
-S3_SECRET_ACCESS_KEY = "SECRET_ACCESS"
+S3_ACCESS_KEY_ID = "41DUl3Aw2SiWuFW2OZ9P"
+S3_SECRET_ACCESS_KEY = "aID0sUgRZPle6RmGsxbOaULOwwYpACBMAs39vkjH"
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Railway: the installer generates a long random enablement secret.
