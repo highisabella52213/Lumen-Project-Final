@@ -1,6 +1,10 @@
+import net from "node:net";
+import tls from "node:tls";
+
 /*
- * Lumen one-file Cloudflare Worker installer — v18.0.0
- * Deploy this single file in your own Cloudflare Workers account.
+ * Lumen public one-file Cloudflare Worker installer — v20.0.0
+ * Every user deploys this same file in their own Cloudflare Workers account.
+ * Requires a Workers compatibility date of 2026-08-04 or later for node:net/node:tls.
  * It does not use KV, D1, Durable Objects, Cache API, analytics, or console logs.
  */
 
@@ -9,8 +13,11 @@ const SOURCE_REPO = "Lumen-Project-Final";
 const SOURCE_FULL = SOURCE_OWNER + "/" + SOURCE_REPO;
 const GITHUB_API = "https://api.github.com";
 const RAILWAY_API = "https://backboard.railway.com/graphql/v2";
-const INSTALLER_VERSION = "19.0.0";
+const INSTALLER_VERSION = "20.0.0";
 const MAX_BODY_BYTES = 24 * 1024;
+const MAX_UPSTREAM_BYTES = 4 * 1024 * 1024;
+const HTTP_PROXY = Object.freeze({ hostname: "176.111.37.216", port: 39811 });
+const ALLOWED_UPSTREAMS = new Set(["api.github.com", "backboard.railway.com"]);
 
 class InstallError extends Error {
   constructor(code, step, messageEn, messageFa, status = 400) {
@@ -79,18 +86,180 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchWithTimeout(url, options, timeoutMs = 18000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+function transportError(code, messageEn, messageFa, status = 502) {
+  return new InstallError(code, "network", messageEn, messageFa, status);
+}
+
+function safeHeaderValue(value) {
+  const text = String(value == null ? "" : value);
+  if (/[\r\n\0]/.test(text)) throw transportError("INVALID_UPSTREAM_HEADER", "An internal upstream header was invalid.", "یکی از هدرهای داخلی مقصد نامعتبر بود.", 500);
+  return text;
+}
+
+function decodeChunked(body) {
+  const chunks = [];
+  let offset = 0;
+  let size = 0;
+  while (offset < body.length) {
+    const lineEnd = body.indexOf("\r\n", offset, "latin1");
+    if (lineEnd < 0 || lineEnd - offset > 32) throw new Error("invalid chunk header");
+    const line = body.subarray(offset, lineEnd).toString("ascii").split(";", 1)[0].trim();
+    if (!/^[0-9a-fA-F]+$/.test(line)) throw new Error("invalid chunk size");
+    const length = Number.parseInt(line, 16);
+    offset = lineEnd + 2;
+    if (length === 0) return Buffer.concat(chunks, size);
+    if (!Number.isSafeInteger(length) || length < 0 || offset + length + 2 > body.length) throw new Error("truncated chunk");
+    const chunk = body.subarray(offset, offset + length);
+    chunks.push(chunk); size += chunk.length;
+    if (size > MAX_UPSTREAM_BYTES) throw new Error("response too large");
+    offset += length;
+    if (body[offset] !== 13 || body[offset + 1] !== 10) throw new Error("invalid chunk ending");
+    offset += 2;
+  }
+  throw new Error("missing final chunk");
+}
+
+function openProxyTunnel(targetHostname, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let handshake = Buffer.alloc(0);
+    const raw = net.createConnection({ host: HTTP_PROXY.hostname, port: HTTP_PROXY.port });
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      try { raw.destroy(); } catch (_) {}
+      reject(error instanceof InstallError ? error : transportError("HTTP_PROXY_UNAVAILABLE", "The configured HTTP proxy could not establish a secure connection.", "پروکسی HTTP تنظیم‌شده نتوانست اتصال امن را برقرار کند."));
+    };
+    raw.setNoDelay(true);
+    raw.setTimeout(timeoutMs, () => fail(transportError("HTTP_PROXY_TIMEOUT", "The configured HTTP proxy timed out.", "زمان انتظار پروکسی HTTP تنظیم‌شده به پایان رسید.", 504)));
+    raw.once("error", fail);
+    raw.once("connect", () => {
+      raw.write("CONNECT " + targetHostname + ":443 HTTP/1.1\r\nHost: " + targetHostname + ":443\r\nProxy-Connection: keep-alive\r\nUser-Agent: Lumen-Installer-Proxy/20\r\n\r\n");
+    });
+    const onData = (chunk) => {
+      handshake = Buffer.concat([handshake, Buffer.from(chunk)]);
+      if (handshake.length > 16 * 1024) return fail(transportError("HTTP_PROXY_RESPONSE", "The HTTP proxy returned an invalid response.", "پروکسی HTTP پاسخ نامعتبر برگرداند."));
+      const boundary = handshake.indexOf("\r\n\r\n");
+      if (boundary < 0) return;
+      raw.off("data", onData);
+      const head = handshake.subarray(0, boundary).toString("latin1");
+      const status = Number((head.match(/^HTTP\/1\.[01]\s+(\d{3})/i) || [])[1] || 0);
+      if (status !== 200) return fail(transportError("HTTP_PROXY_REJECTED", "The HTTP proxy rejected the tunnel request (HTTP " + status + ").", "پروکسی HTTP درخواست تونل را رد کرد (HTTP " + status + ")."));
+      if (handshake.length !== boundary + 4) return fail(transportError("HTTP_PROXY_INJECTION", "The HTTP proxy returned unexpected bytes before TLS.", "پروکسی HTTP پیش از TLS داده غیرمنتظره فرستاد."));
+      raw.setTimeout(0);
+      raw.off("error", fail);
+      const secure = tls.connect({ socket: raw, servername: targetHostname, rejectUnauthorized: true, ALPNProtocols: ["http/1.1"] });
+      secure.setTimeout(timeoutMs, () => {
+        try { secure.destroy(); } catch (_) {}
+      });
+      secure.once("error", fail);
+      secure.once("secureConnect", () => {
+        if (settled) return;
+        if (!secure.authorized || (secure.alpnProtocol && secure.alpnProtocol !== "http/1.1")) {
+          return fail(transportError("UPSTREAM_TLS_FAILED", "The secure connection through the proxy could not be verified.", "اتصال امن از داخل پروکسی قابل تأیید نبود."));
+        }
+        settled = true;
+        secure.off("error", fail);
+        resolve(secure);
+      });
+    };
+    raw.on("data", onData);
+  });
+}
+
+function collectHttpResponse(socket, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch (_) {}
+      reject(error);
+    };
+    const timer = setTimeout(() => fail(transportError("UPSTREAM_TIMEOUT", "A remote service took too long to respond through the HTTP proxy.", "پاسخ سرویس مقصد از داخل پروکسی بیش از حد طول کشید.", 504)), timeoutMs);
+    socket.on("data", (chunk) => {
+      const part = Buffer.from(chunk); total += part.length;
+      if (total > MAX_UPSTREAM_BYTES + 64 * 1024) return fail(transportError("UPSTREAM_RESPONSE_TOO_LARGE", "A remote service returned too much data.", "حجم پاسخ سرویس مقصد بیش از حد مجاز بود."));
+      chunks.push(part);
+    });
+    socket.once("error", () => fail(transportError("UPSTREAM_UNAVAILABLE", "A remote service could not be reached through the HTTP proxy.", "ارتباط با سرویس مقصد از داخل پروکسی برقرار نشد.")));
+    socket.once("timeout", () => fail(transportError("UPSTREAM_TIMEOUT", "A remote service took too long to respond through the HTTP proxy.", "پاسخ سرویس مقصد از داخل پروکسی بیش از حد طول کشید.", 504)));
+    socket.once("end", () => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      resolve(Buffer.concat(chunks, total));
+    });
+  });
+}
+
+async function proxyFetch(url, options = {}, timeoutMs = 18000) {
+  const target = new URL(url);
+  if (target.protocol !== "https:" || !ALLOWED_UPSTREAMS.has(target.hostname) || (target.port && target.port !== "443")) {
+    throw transportError("UPSTREAM_NOT_ALLOWED", "The requested upstream is not allowed.", "سرویس مقصد درخواست‌شده مجاز نیست.", 500);
+  }
+  const method = String(options.method || "GET").toUpperCase();
+  if (!/^(GET|POST|PUT|PATCH|DELETE)$/.test(method)) throw transportError("METHOD_NOT_ALLOWED", "The upstream request method is not allowed.", "روش درخواست مقصد مجاز نیست.", 500);
+  const body = options.body == null ? Buffer.alloc(0) : Buffer.from(String(options.body), "utf8");
+  if (body.length > MAX_BODY_BYTES) throw transportError("UPSTREAM_BODY_TOO_LARGE", "The upstream request is too large.", "حجم درخواست مقصد بیش از حد مجاز است.", 500);
+  const headers = new Headers(options.headers || {});
+  const lines = [];
+  for (const [name, value] of headers.entries()) {
+    const lower = name.toLowerCase();
+    if (["host", "connection", "proxy-connection", "content-length", "transfer-encoding", "accept-encoding"].includes(lower)) continue;
+    lines.push(name + ": " + safeHeaderValue(value));
+  }
+  lines.push("Host: " + target.hostname, "Connection: close", "Accept-Encoding: identity");
+  if (body.length) lines.push("Content-Length: " + body.length);
+  const requestHead = method + " " + (target.pathname || "/") + target.search + " HTTP/1.1\r\n" + lines.join("\r\n") + "\r\n\r\n";
+  let socket;
   try {
-    return await fetch(url, { ...options, signal: controller.signal, redirect: "error" });
-  } catch (error) {
-    if (error && error.name === "AbortError") {
-      throw new InstallError("UPSTREAM_TIMEOUT", "network", "A remote service took too long to respond.", "پاسخ سرویس مقصد بیش از حد طول کشید.", 504);
+    socket = await openProxyTunnel(target.hostname, timeoutMs);
+    socket.write(Buffer.concat([Buffer.from(requestHead, "utf8"), body]));
+    const raw = await collectHttpResponse(socket, timeoutMs);
+    const boundary = raw.indexOf("\r\n\r\n");
+    if (boundary < 0 || boundary > 64 * 1024) throw new Error("missing HTTP headers");
+    const headerText = raw.subarray(0, boundary).toString("latin1");
+    const statusMatch = headerText.match(/^HTTP\/1\.[01]\s+(\d{3})(?:\s+([^\r\n]*))?/i);
+    if (!statusMatch) throw new Error("invalid HTTP status");
+    const status = Number(statusMatch[1]);
+    let responseBody = raw.subarray(boundary + 4);
+    const responseHeaders = new Headers();
+    let chunked = false;
+    let contentLength = null;
+    for (const line of headerText.split("\r\n").slice(1)) {
+      const colon = line.indexOf(":"); if (colon < 1) continue;
+      const name = line.slice(0, colon).trim(); const value = line.slice(colon + 1).trim(); const lower = name.toLowerCase();
+      if (lower === "transfer-encoding" && value.toLowerCase().includes("chunked")) chunked = true;
+      else if (lower === "content-length") contentLength = Number(value);
+      else if (!["connection", "proxy-connection", "keep-alive", "upgrade", "content-encoding"].includes(lower)) responseHeaders.append(name, value);
     }
-    throw new InstallError("UPSTREAM_UNAVAILABLE", "network", "A remote service could not be reached.", "ارتباط با سرویس مقصد برقرار نشد.", 502);
+    if (chunked) responseBody = decodeChunked(responseBody);
+    else if (Number.isFinite(contentLength) && contentLength >= 0) {
+      if (responseBody.length < contentLength) throw new Error("truncated HTTP body");
+      responseBody = responseBody.subarray(0, contentLength);
+    }
+    if (responseBody.length > MAX_UPSTREAM_BYTES) throw new Error("response too large");
+    responseHeaders.set("Content-Length", String(responseBody.length));
+    return new Response(status === 204 || status === 304 ? null : responseBody, { status, statusText: statusMatch[2] || "", headers: responseHeaders });
+  } catch (error) {
+    if (error instanceof InstallError) throw error;
+    throw transportError("UPSTREAM_RESPONSE", "A remote service returned an unreadable response through the HTTP proxy.", "سرویس مقصد از داخل پروکسی پاسخ قابل‌خواندن نداد.");
   } finally {
-    clearTimeout(timer);
+    try { if (socket) socket.destroy(); } catch (_) {}
+  }
+}
+
+async function fetchWithTimeout(url, options, timeoutMs = 18000) {
+  try {
+    // Tests inject a private transport; production always uses the enforced HTTP proxy.
+    const testTransport = globalThis.__LUMEN_TEST_FETCH__;
+    if (typeof testTransport === "function") return await testTransport(url, { ...options, redirect: "error" });
+    return await proxyFetch(url, options, timeoutMs);
+  } catch (error) {
+    if (error instanceof InstallError) throw error;
+    throw transportError("UPSTREAM_UNAVAILABLE", "A remote service could not be reached through the configured HTTP proxy.", "ارتباط با سرویس مقصد از طریق پروکسی HTTP تنظیم‌شده برقرار نشد.");
   }
 }
 
@@ -108,7 +277,7 @@ async function github(token, path, options = {}) {
       Accept: "application/vnd.github+json",
       Authorization: "Bearer " + token,
       "Content-Type": "application/json",
-      "User-Agent": "Lumen-Cloudflare-Installer/19",
+      "User-Agent": "Lumen-Cloudflare-Installer/20",
       "X-GitHub-Api-Version": "2022-11-28",
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
@@ -163,7 +332,7 @@ async function railway(token, query, variables, step) {
       Accept: "application/json",
       Authorization: "Bearer " + token,
       "Content-Type": "application/json",
-      "User-Agent": "Lumen-Cloudflare-Installer/19",
+      "User-Agent": "Lumen-Cloudflare-Installer/20",
     },
     body: JSON.stringify({ query, variables }),
   }, 22000);
@@ -194,7 +363,7 @@ async function provisionRailway(railwayToken, githubToken, fork, branch, adminPa
   const created = await railway(
     railwayToken,
     "mutation InstallerProject($input: ProjectCreateInput!) { projectCreate(input: $input) { id name environments { edges { node { id name } } } } }",
-    { input: { name: projectName, description: "Lumen relay installed by the one-file Cloudflare setup", defaultEnvironmentName: "production", prDeploys: false } },
+    { input: { name: projectName, description: "Lumen installed by the public one-file Cloudflare setup", defaultEnvironmentName: "production", prDeploys: false } },
     "project"
   );
   const project = created.projectCreate;
@@ -224,6 +393,7 @@ async function provisionRailway(railwayToken, githubToken, fork, branch, adminPa
     LUMEN_RAILWAY_TOKEN: railwayToken,
     RAILWAY_GIT_BRANCH: branch,
     LUMEN_INSTALLER_VERSION: INSTALLER_VERSION,
+    LUMEN_CREDENTIAL_SOURCE: "installer",
     LUMEN_REQUIRE_PERSISTENT_STORAGE: "1",
   };
 
@@ -373,7 +543,7 @@ const worker = {
   },
 };
 
-export const __test = { installPayload, handleInstall, randomSecret, htmlResponse };
+export const __test = { installPayload, handleInstall, randomSecret, htmlResponse, proxyFetch, decodeChunked };
 export default worker;
 
 const INSTALLER_HTML = `<!doctype html>
@@ -425,12 +595,12 @@ html[data-theme="dark"]{
 </header>
 <main class="layout">
  <section class="hero" aria-labelledby="hero-title">
-  <div><div class="eyebrow"><span aria-hidden="true">✦</span><span data-fa="نصاب رسمی Lumen · نسخه ۱۹" data-en="Official Lumen installer · v19">نصاب رسمی Lumen · نسخه ۱۹</span></div><h1 id="hero-title" data-fa="نصب Lumen روی Railway" data-en="Install Lumen on Railway">نصب Lumen روی Railway</h1><p data-fa="فقط دو توکن را وارد کنید. نصاب مخزن رسمی را فورک می‌کند، فضای دائمی و تنظیمات Railway را می‌سازد و لینک پنل را تحویل می‌دهد." data-en="Enter two tokens. The installer forks the official repository, configures persistent storage and Railway, deploys the service, and returns the panel URL.">فقط دو توکن را وارد کنید. نصاب مخزن رسمی را فورک می‌کند، فضای دائمی و تنظیمات Railway را می‌سازد و لینک پنل را تحویل می‌دهد.</p></div>
-  <div class="source-card"><div class="source-label" data-fa="سورس ثابت و رسمی" data-en="Fixed official source">سورس ثابت و رسمی</div><div class="source-name">highisabella52213/Lumen-Project-Final</div><div class="source-meta"><span class="chip">WS only</span><span class="chip">Railway</span><span class="chip">v19</span></div></div>
+  <div><div class="eyebrow"><span aria-hidden="true">✦</span><span data-fa="نصاب عمومی Lumen · نسخه ۲۰" data-en="Public Lumen installer · v20">نصاب عمومی Lumen · نسخه ۲۰</span></div><h1 id="hero-title" data-fa="نصب Lumen روی Railway" data-en="Install Lumen on Railway">نصب Lumen روی Railway</h1><p data-fa="فقط دو توکن را وارد کنید. نصاب مخزن رسمی را فورک می‌کند، فضای دائمی و تنظیمات Railway را می‌سازد و لینک پنل را تحویل می‌دهد." data-en="Enter two tokens. The installer forks the official repository, configures persistent storage and Railway, deploys the service, and returns the panel URL.">فقط دو توکن را وارد کنید. نصاب مخزن رسمی را فورک می‌کند، فضای دائمی و تنظیمات Railway را می‌سازد و لینک پنل را تحویل می‌دهد.</p></div>
+  <div class="source-card"><div class="source-label" data-fa="سورس ثابت و رسمی" data-en="Fixed official source">سورس ثابت و رسمی</div><div class="source-name">highisabella52213/Lumen-Project-Final</div><div class="source-meta"><span class="chip">WS only</span><span class="chip">Railway</span><span class="chip">v20</span><span class="chip">HTTP proxy</span></div></div>
  </section>
  <section class="panel">
   <div class="view" id="form-view">
-   <div class="panel-head"><div class="step-number">01</div><div><h2 data-fa="دسترسی‌های نصب" data-en="Installation access">دسترسی‌های نصب</h2><p class="muted" data-fa="توکن‌ها ذخیره یا لاگ نمی‌شوند و فقط در همین درخواست استفاده می‌شوند." data-en="Tokens are never stored or logged and are used only during this request.">توکن‌ها ذخیره یا لاگ نمی‌شوند و فقط در همین درخواست استفاده می‌شوند.</p></div></div>
+   <div class="panel-head"><div class="step-number">01</div><div><h2 data-fa="دسترسی‌های نصب" data-en="Installation access">دسترسی‌های نصب</h2><p class="muted" data-fa="Worker توکن‌ها را نگه‌داری یا لاگ نمی‌کند؛ پس از بررسی، آن‌ها داخل متغیرهای محافظت‌شده Railway خودتان ثبت می‌شوند." data-en="The Worker never persists or logs tokens; after verification, they are stored in your own protected Railway service variables.">Worker توکن‌ها را نگه‌داری یا لاگ نمی‌کند؛ پس از بررسی، آن‌ها داخل متغیرهای محافظت‌شده Railway خودتان ثبت می‌شوند.</p></div></div>
    <form id="install-form" novalidate>
     <div class="field"><div class="field-top"><label for="github-token" data-fa="توکن GitHub" data-en="GitHub token">توکن GitHub</label><a class="direct-link" href="https://github.com/settings/tokens/new?scopes=public_repo&description=Lumen%20Cloudflare%20Installer" target="_blank" rel="noopener noreferrer" data-fa="ساخت مستقیم ↗" data-en="Create token ↗">ساخت مستقیم ↗</a></div><div class="input-wrap"><input id="github-token" type="password" required autocomplete="new-password" spellcheck="false" aria-describedby="github-help"><button class="reveal" type="button" data-reveal="github-token" aria-label="Show or hide GitHub token">◉</button></div><small class="support" id="github-help" data-fa="توکن کلاسیک با دسترسی public_repo؛ برای فورک و استار مخزن عمومی." data-en="Classic token with public_repo scope, used to fork and star the public source.">توکن کلاسیک با دسترسی public_repo؛ برای فورک و استار مخزن عمومی.</small></div>
     <div class="field"><div class="field-top"><label for="railway-token" data-fa="توکن حساب Railway" data-en="Railway account token">توکن حساب Railway</label><a class="direct-link" href="https://railway.com/account/tokens" target="_blank" rel="noopener noreferrer" data-fa="ساخت مستقیم ↗" data-en="Create token ↗">ساخت مستقیم ↗</a></div><div class="input-wrap"><input id="railway-token" type="password" required autocomplete="new-password" spellcheck="false" aria-describedby="railway-help"><button class="reveal" type="button" data-reveal="railway-token" aria-label="Show or hide Railway token">◉</button></div><small class="support" id="railway-help" data-fa="Account Token لازم است؛ Project Token نمی‌تواند پروژه جدید بسازد." data-en="An Account Token is required; a Project Token cannot create a new project.">Account Token لازم است؛ Project Token نمی‌تواند پروژه جدید بسازد.</small></div>
@@ -439,7 +609,7 @@ html[data-theme="dark"]{
      <div class="guide-row"><div class="guide-icon">2</div><div class="guide-copy"><b data-fa="Account Token ریلوی را بسازید" data-en="Create Railway Account Token">Account Token ریلوی را بسازید</b><span data-fa="از صفحه Tokens در تنظیمات حساب" data-en="From the Tokens page in account settings">از صفحه Tokens در تنظیمات حساب</span></div><a href="https://railway.com/account/tokens" target="_blank" rel="noopener noreferrer" aria-label="Open Railway token page">↗</a></div>
      <div class="guide-row"><div class="guide-icon">3</div><div class="guide-copy"><b data-fa="GitHub را به Railway متصل کنید" data-en="Connect GitHub to Railway">GitHub را به Railway متصل کنید</b><span data-fa="اجازه دسترسی به فورک Lumen را بدهید" data-en="Grant Railway access to the Lumen fork">اجازه دسترسی به فورک Lumen را بدهید</span></div><a href="https://railway.com/account/integrations" target="_blank" rel="noopener noreferrer" aria-label="Open Railway integrations">↗</a></div>
     </div>
-    <div class="notice"><span aria-hidden="true">◆</span><span data-fa="این Worker را فقط در حساب Cloudflare خودتان اجرا کنید. توکن Railway دسترسی گسترده دارد و برای آپدیت‌های بعدی داخل متغیرهای امن سرویس قرار می‌گیرد." data-en="Run this Worker only in your own Cloudflare account. The Railway token has broad access and is saved as a protected service variable for future updates.">این Worker را فقط در حساب Cloudflare خودتان اجرا کنید. توکن Railway دسترسی گسترده دارد و برای آپدیت‌های بعدی داخل متغیرهای امن سرویس قرار می‌گیرد.</span></div>
+    <div class="notice"><span aria-hidden="true">◆</span><span data-fa="این فایل برای استفاده عمومی است، اما هر شخص باید نسخه خودش را در حساب Cloudflare خودش دیپلوی کند. درخواست‌های GitHub و Railway فقط از تونل TLS داخل پروکسی ثابت عبور می‌کنند. هرگز توکن را در Worker متعلق به شخص دیگری وارد نکنید." data-en="This file is public, but every user must deploy a personal copy in their own Cloudflare account. GitHub and Railway requests use TLS inside the enforced proxy tunnel. Never enter tokens into another person's Worker.">این فایل برای استفاده عمومی است، اما هر شخص باید نسخه خودش را در حساب Cloudflare خودش دیپلوی کند. درخواست‌های GitHub و Railway فقط از تونل TLS داخل پروکسی ثابت عبور می‌کنند. هرگز توکن را در Worker متعلق به شخص دیگری وارد نکنید.</span></div>
     <button class="filled" id="install-button" type="submit"><span aria-hidden="true">✦</span><span data-fa="شروع نصب خودکار" data-en="Start automated setup">شروع نصب خودکار</span></button>
    </form>
   </div>
@@ -448,12 +618,12 @@ html[data-theme="dark"]{
   <div class="view" id="error-view" hidden aria-live="assertive"><div class="error-mark">!</div><h2 data-fa="نصب متوقف شد" data-en="Setup stopped">نصب متوقف شد</h2><div class="error-box" id="error-message"></div><button class="tonal" id="retry" type="button" data-fa="بازگشت و تلاش دوباره" data-en="Go back and retry">بازگشت و تلاش دوباره</button></div>
  </section>
 </main>
-<div class="footer" data-fa="Lumen one-file installer · بدون ذخیره‌سازی توکن · پاسخ‌های no-store" data-en="Lumen one-file installer · no token persistence · no-store responses">Lumen one-file installer · بدون ذخیره‌سازی توکن · پاسخ‌های no-store</div>
+<div class="footer" data-fa="Lumen public one-file installer · بدون ذخیره توکن در Worker · HTTP proxy enforced" data-en="Lumen public one-file installer · no Worker token persistence · enforced HTTP proxy">Lumen public one-file installer · بدون ذخیره توکن در Worker · HTTP proxy enforced</div>
 </div>
 <script nonce="__NONCE__">
 (function(){
  var lang=localStorage.getItem('lumen-installer-lang')||'fa';var theme=localStorage.getItem('lumen-installer-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');var progressTimer=null;
- var stepDefs=[['اعتبارسنجی توکن‌ها','Validate tokens'],['استار کردن سورس رسمی','Star official source'],['ساخت یا بررسی فورک','Create or verify fork'],['ساخت پروژه Railway','Create Railway project'],['تنظیم متغیرها و سرویس','Configure service and variables'],['اتصال فضای دائمی /data','Attach persistent /data'],['ساخت دامنه عمومی','Generate public domain'],['شروع دیپلوی','Start deployment']];
+ var stepDefs=[['اتصال امن از طریق پروکسی و اعتبارسنجی توکن‌ها','Secure proxy connection and token validation'],['استار کردن سورس رسمی','Star official source'],['ساخت یا بررسی فورک','Create or verify fork'],['ساخت پروژه Railway','Create Railway project'],['تنظیم متغیرها و سرویس','Configure service and variables'],['اتصال فضای دائمی /data','Attach persistent /data'],['ساخت دامنه عمومی','Generate public domain'],['شروع دیپلوی','Start deployment']];
  function applyLocale(){document.documentElement.lang=lang;document.documentElement.dir=lang==='fa'?'rtl':'ltr';document.querySelectorAll('[data-fa]').forEach(function(el){el.textContent=el.getAttribute(lang==='fa'?'data-fa':'data-en')});document.querySelector('.lang-text').textContent=lang==='fa'?'EN':'فا';renderSteps(window.__activeStep||0)}
  function applyTheme(){document.documentElement.setAttribute('data-theme',theme)}
  function show(id){['form-view','progress-view','success-view','error-view'].forEach(function(name){document.getElementById(name).hidden=name!==id})}

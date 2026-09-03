@@ -485,6 +485,17 @@ a{color:inherit;text-decoration:none}
 .pw-submit:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(168,53,28,.42)}
 .pw-submit:active{transform:translateY(0) scale(.98)}
 
+/* ══════ protected update credentials ══════ */
+.update-credentials{margin-top:18px;background:var(--md-sys-color-surface-container-lowest);border:1px solid var(--md-sys-color-outline-variant);border-radius:28px;overflow:hidden;box-shadow:var(--shadow)}
+.update-credentials-head{display:flex;align-items:center;gap:14px;padding:21px 23px;border-bottom:1px solid var(--md-sys-color-outline-variant);background:var(--md-sys-color-surface-container-low)}
+.update-credentials-icon{width:48px;height:48px;border-radius:18px 18px 7px 18px;background:var(--md-sys-color-primary-container);color:var(--md-sys-color-on-primary-container);display:grid;place-items:center;font-size:22px;flex:0 0 48px}
+.update-credentials-copy{min-width:0;flex:1}.update-credentials-title{font-size:15px;font-weight:800}.update-credentials-sub{font-size:10.5px;color:var(--md-sys-color-on-surface-variant);margin-top:3px;line-height:1.55}
+.update-status-pill{min-height:36px;padding:0 12px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);font-size:10px;font-weight:800;white-space:nowrap}.update-status-pill.ready{background:var(--green-bg);color:var(--green-t)}
+.update-credentials-body{padding:20px 22px 22px}.update-lock-note{display:flex;align-items:flex-start;gap:10px;padding:13px 15px;margin-bottom:16px;border-radius:15px;background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);font-size:10.5px;line-height:1.65}.update-lock-note.warn{background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container)}.update-lock-note i{font-size:18px;margin-top:1px}
+.update-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.update-field{min-width:0}.update-field.wide{grid-column:1/-1}.update-field label{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:10px;font-weight:750;color:var(--t2);margin-bottom:7px}.update-field a{min-height:44px;padding-inline:8px;display:inline-flex;align-items:center;color:var(--md-sys-color-primary);text-decoration:none;font-size:9.5px;border-radius:999px}.update-field input{width:100%;min-height:48px;border:1px solid var(--card-b);border-radius:13px;padding:0 14px;background:var(--md-sys-color-surface-container-low);color:var(--t1);font:12px ui-monospace,SFMono-Regular,Consolas,monospace;direction:ltr;text-align:left;outline:0}.update-field input:focus{border-color:var(--md-sys-color-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--md-sys-color-primary) 13%,transparent)}.update-field input:disabled{opacity:.64;cursor:not-allowed;background:var(--md-sys-color-surface-container)}
+.update-credentials-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;margin-top:17px;flex-wrap:wrap}.update-credentials-actions .btn{min-height:44px}.update-secret-state{font-size:9.5px;color:var(--md-sys-color-on-surface-variant);margin-top:6px}
+@media(max-width:700px){.update-form-grid{grid-template-columns:1fr}.update-field.wide{grid-column:auto}.update-credentials-head{align-items:flex-start;flex-wrap:wrap}.update-status-pill{margin-inline-start:62px}.update-credentials-body{padding:16px}.update-credentials-actions{display:grid;grid-template-columns:1fr}.update-credentials-actions .btn{width:100%;justify-content:center}}
+
 /* ══════ active connections ══════ */
 .conn-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
 .conn-hero-tile{background:var(--card);border:1px solid var(--card-b);border-radius:16px;padding:16px 18px;position:relative;overflow:hidden;transition:.2s}
@@ -1050,8 +1061,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;ba
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Lumen Relay v19 · command rail + route studio
+/* ════════���══════════════════════════════════════════════════════════════════
+   Lumen Relay v20 · command rail + route studio
    A second expressive composition, intentionally unlike the v11 sidebar.
    ═══════════════════════════════════════════════════════════════════════════ */
 :root{--command-rail-w:108px;--v12-card-gap:18px}
@@ -1211,7 +1222,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <button class="sb-close" id="close-sb"><i class="ti ti-x"></i></button>
   <div class="logo">
     <div class="logo-img"><i class="ti ti-shield-bolt"></i></div>
-    <div><div class="logo-name">Lumen Relay</div><div class="logo-sub">Command Console · v19</div></div>
+    <div><div class="logo-name">Lumen Relay</div><div class="logo-sub">Command Console · v20</div></div>
   </div>
   <nav class="nav-wrap" aria-label="Workspace navigation">
     <div class="nav-sec">Workspace</div>
@@ -1274,7 +1285,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="card-title"><i class="ti ti-activity"></i> Service status</div>
       <div class="sr"><span class="sr-k"><i class="ti ti-shield-check"></i> UUID Auth</span><span class="sr-v" style="color:var(--green-t)">● Active · strict</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-circle-check"></i> VLESS / WS Tunnel</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
-      <div class="sr"><span class="sr-k"><i class="ti ti-folders"></i> Sub Groups</span><span class="sr-v" style="color:var(--green-t)">● Active v19</span></div>
+      <div class="sr"><span class="sr-k"><i class="ti ti-folders"></i> Sub Groups</span><span class="sr-v" style="color:var(--green-t)">● Active v20</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-rss"></i> Subscription API</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-clock"></i> Uptime</span><span class="sr-v" id="uptime-inline">—</span></div>
       <div class="sr" style="flex-direction:column;align-items:flex-start;gap:4px">
@@ -1288,7 +1299,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
   </div>
   <div class="dash-footer">
-    <span class="df-text">Lumen Relay · Version 19.0</span>
+    <span class="df-text">Lumen Relay · Version 20.0</span>
     
   </div>
 </section>
@@ -1609,7 +1620,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
     <div class="card">
       <div class="card-title"><i class="ti ti-shield-check"></i> Access control</div>
-      <div class="sr"><span class="sr-k"><i class="ti ti-id-badge"></i> UUID Auth strict</span><span class="sr-v" style="color:var(--green-t)">● Active v19</span></div>
+      <div class="sr"><span class="sr-k"><i class="ti ti-id-badge"></i> UUID Auth strict</span><span class="sr-v" style="color:var(--green-t)">● Active v20</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-toggle-right"></i> Enable / disable config</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-gauge"></i> Traffic quota</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-calendar-x"></i> Expiry date</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
@@ -1656,7 +1667,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
       <div class="srv-tiles">
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-route"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Default port</div><div class="srv-tile-val">443 (TLS) · can be overridden per config</div></div></div>
-        <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-versions"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Version</div><div class="srv-tile-val">v19.0</div></div></div>
+        <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-versions"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Version</div><div class="srv-tile-val">v20.0</div></div></div>
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-brand-fastapi"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Framework</div><div class="srv-tile-val">FastAPI + Uvicorn</div></div></div>
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-cloud"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Platform</div><div class="srv-tile-val">Railway</div></div></div>
         <div class="srv-tile" style="grid-column:1/-1"><div class="srv-tile-icon"><i class="ti ti-device-floppy"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Storage</div><div class="srv-tile-val">JSON File (/data)</div></div></div>
@@ -1697,6 +1708,28 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <button class="pw-eye" type="button" onclick="togglePwField('cp-cf',this)"><i class="ti ti-eye"></i></button>
         </div>
         <button class="pw-submit" onclick="changePw()"><i class="ti ti-shield-check"></i> Save new password</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="update-credentials" id="update-credentials-panel">
+    <div class="update-credentials-head">
+      <div class="update-credentials-icon"><i class="ti ti-key"></i></div>
+      <div class="update-credentials-copy"><div class="update-credentials-title">Update credentials</div><div class="update-credentials-sub">For automatic fork synchronization and Railway deployment</div></div>
+      <div class="update-status-pill" id="update-credential-status"><i class="ti ti-loader-2"></i><span>Checking…</span></div>
+    </div>
+    <div class="update-credentials-body">
+      <div class="update-lock-note" id="update-lock-note"><i class="ti ti-shield-lock"></i><span>Loading protected credential status…</span></div>
+      <div class="update-form-grid">
+        <div class="update-field"><label for="update-upstream">Official source</label><input id="update-upstream" value="highisabella52213/Lumen-Project-Final" disabled></div>
+        <div class="update-field"><label for="update-fork">Your deployed repository</label><input id="update-fork" placeholder="owner/Lumen-Project-Final" autocomplete="off"></div>
+        <div class="update-field"><label for="update-branch">Deployment branch</label><input id="update-branch" value="main" placeholder="main" autocomplete="off"></div>
+        <div class="update-field"><label for="update-railway-token"><span>Railway account token</span><a href="https://railway.com/account/tokens" target="_blank" rel="noopener noreferrer">Create token ↗</a></label><input id="update-railway-token" type="password" placeholder="Enter Railway token" autocomplete="new-password"><div class="update-secret-state" id="update-railway-state">Not saved</div></div>
+        <div class="update-field wide"><label for="update-github-token"><span>GitHub token</span><a href="https://github.com/settings/tokens/new?scopes=public_repo&amp;description=Lumen%20Updater" target="_blank" rel="noopener noreferrer">Create token ↗</a></label><input id="update-github-token" type="password" placeholder="Enter GitHub token" autocomplete="new-password"><div class="update-secret-state" id="update-github-state">Not saved</div></div>
+      </div>
+      <div class="update-credentials-actions">
+        <button class="btn btn-o" id="update-unlock-btn" type="button" onclick="unlockUpdateCredentials()"><i class="ti ti-lock-open"></i> Change protected values</button>
+        <button class="btn btn-p" id="update-save-btn" type="button" onclick="saveUpdateSetup()"><i class="ti ti-device-floppy"></i> Save and verify</button>
       </div>
     </div>
   </div>
@@ -1891,7 +1924,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Has a number": "دارای عدد",
   "Upper & lower case": "حروف بزرگ و کوچک",
   "Repeat new password": "تکرار رمز جدید",
-  "Save new password": "ذخیره رمز جدید",
+  "Save new password": "ذ��یره رمز جدید",
   "The IP address seen by destination websites": "IP دیده‌شده توسط سایت‌های مقصد",
   "Outbound mode": "حالت خروجی",
   "Direct — server connection (default)": "مستقیم — اتصال سرور (پیش‌فرض)",
@@ -1970,7 +2003,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Railway account token": "توکن اکانت Railway",
   "GitHub fine-grained token": "توکن Fine-grained گیت‌هاب",
   "Reset setup": "پاک‌کردن تنظیمات",
-  "Save and verify": "ذخیره و بررسی",
+  "Save and verify": "ذخیره و ب��رسی",
   "Updater configured": "آپدیتر تنظیم شده",
   "Complete one-time setup to enable future updates.": "برای فعال‌شدن آپدیت‌های بعدی، تنظیم یک‌باره را کامل کنید.",
   "Remove saved update credentials?": "اطلاعات ذخیره‌شده آپدیت حذف شود؟",
@@ -1989,7 +2022,145 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Required because Railway cannot modify a GitHub fork. Grant repository Contents write access only to this fork.": "ضروری است چون Railway نمی‌تواند فورک گیت‌هاب را تغییر دهد. دسترسی نوشتن Contents را فقط برای همین فورک بدهید.",
   "Version 19.1.0 is ready. Your fork will be synced before Railway deploys it.": "نسخه 19.1.0 آماده است؛ ابتدا فورک همگام و سپس روی Railway دیپلوی می‌شود.",
   "Synchronizing fork and starting Railway deployment…": "در حال همگام‌سازی فورک و شروع دیپلوی Railway…",
-  "Deployment started. This panel may reconnect during the update.": "دیپلوی شروع شد؛ ممکن است پنل هنگام آپدیت دوباره متصل شود."
+  "Deployment started. This panel may reconnect during the update.": "دیپلوی شروع شد؛ ممکن است پنل هنگام آپدیت دوباره متصل شود.",
+  "Update credentials": "اعتبارنامه‌های به‌روزرسانی",
+  "For automatic fork synchronization and Railway deployment": "برای همگام‌سازی خودکار فورک و دیپلوی Railway",
+  "Checking…": "در حال بررسی…",
+  "Loading protected credential status…": "در حال دریافت وضعیت اعتبارنامه‌های محافظت‌شده…",
+  "Official source": "سورس رسمی",
+  "Your deployed repository": "ریپازیتوری دیپلوی‌شده شما",
+  "Deployment branch": "شاخه دیپلوی",
+  "Create token ↗": "ساخت توکن ↗",
+  "GitHub token": "توکن GitHub",
+  "Enter Railway token": "توکن Railway را وارد کنید",
+  "Enter GitHub token": "توکن GitHub را وارد کنید",
+  "Not saved": "ذخیره نشده",
+  "Saved and protected": "ذخیره و محافظت‌شده",
+  "Change protected values": "تغییر مقادیر قفل‌شده",
+  "Ready": "آماده",
+  "Setup required": "نیازمند تنظیم",
+  "Railway deployment context was not detected. Add the tokens as Railway service variables.": "اطلاعات محیط دیپلوی Railway شناسایی نشد؛ توکن‌ها را به‌صورت متغیر سرویس Railway اضافه کنید.",
+  "Installer-managed credentials are filled and locked. Changing them may stop future updates.": "اعتبارنامه‌های نصب‌کننده ثبت و قفل شده‌اند؛ تغییر اشتباه آن‌ها ممکن است آپدیت‌های بعدی را متوقف کند.",
+  "Saved credentials are locked. Unlock only when you need to replace them.": "اعتبارنامه‌های ذخیره‌شده قفل هستند؛ فقط برای جایگزینی آن‌ها قفل را باز کنید.",
+  "Manual deployment detected. Enter both tokens once; Lumen verifies and stores them as protected Railway variables.": "دیپلوی دستی شناسایی شد؛ هر دو توکن را یک‌بار وارد کنید تا لومن آن‌ها را بررسی و به‌صورت متغیر محافظت‌شده Railway ذخیره کند.",
+  "These values control your GitHub and Railway accounts. Incorrect tokens can break updates. Continue?": "این مقادیر به حساب‌های GitHub و Railway دسترسی دارند. توکن اشتباه می‌تواند آپدیت‌ها را از کار بیندازد؛ ادامه می‌دهید؟",
+  "Protected values are unlocked for this session. Blank token fields keep the saved tokens.": "مقادیر محافظت‌شده فقط برای این نشست باز شدند؛ خالی گذاشتن فیلد توکن، مقدار ذخیره‌شده را نگه می‌دارد.",
+  "Credentials saved and verified": "اعتبارنامه‌ها ذخیره و تأیید شدند",
+  "Could not load credential settings": "دریافت تنظیمات اعتبارنامه ناموفق بود",
+  "Could not save credential settings": "ذخیره تنظیمات اعتبارنامه ناموفق بود",
+  "Config created ✓": "کانفیگ ساخته شد ✓",
+  "Config updated ✓": "کانفیگ به‌روزرسانی شد ✓",
+  "Configuration link copied": "لینک کانفیگ کپی شد",
+  "Copy failed": "کپی ناموفق بود",
+  "Could not check version": "بررسی نسخه ناموفق بود",
+  "Could not connect": "اتصال برقرار نشد",
+  "Could not create": "ساخت ناموفق بود",
+  "Could not create config": "ساخت کانفیگ ناموفق بود",
+  "Could not create group": "ساخت گروه ناموفق بود",
+  "Could not load": "بارگذاری ناموفق بود",
+  "Could not load endpoint choices": "بارگذاری گزینه‌های مقصد ناموفق بود",
+  "Could not save": "ذخیره ناموفق بود",
+  "Could not update": "به‌روزرسانی ناموفق بود",
+  "Delete this config?": "این کانفیگ حذف شود؟",
+  "Delete this group? The configs will be kept.": "این گروه حذف شود؟ کانفیگ‌ها باقی می‌مانند.",
+  "Deleted ✓": "حذف شد ✓",
+  "Direct": "مستقیم",
+  "Disabled": "غیرفعال",
+  "Enabled ✓": "فعال شد ✓",
+  "Endpoint list unavailable": "فهرست مقصدها در دسترس نیست",
+  "Enter a UUID": "یک UUID وارد کنید",
+  "Enter your current password": "رمز فعلی را وارد کنید",
+  "Enter your password": "رمز را وارد کنید",
+  "Error": "خطا",
+  "Group configs saved ✓": "کانفیگ‌های گروه ذخیره شدند ✓",
+  "Group created ✓": "گروه ساخته شد ✓",
+  "Group deleted ✓": "گروه حذف شد ✓",
+  "Healthy": "سالم",
+  "Hide configuration link": "پنهان‌کردن لینک کانفیگ",
+  "IP Copied": "IP کپی شد",
+  "Incorrect password": "رمز اشتباه است",
+  "Last update:": "آخرین به‌روزرسانی:",
+  "Medium": "متوسط",
+  "Network": "شبکه",
+  "New config": "کانفیگ جدید",
+  "Nothing to copy": "چیزی برای کپی وجود ندارد",
+  "Open navigation": "بازکردن منو",
+  "Operational": "عملیاتی",
+  "Password": "رمز عبور",
+  "Password updated ✓": "رمز به‌روزرسانی شد ✓",
+  "Passwords do not match": "رمزها یکسان نیستند",
+  "Please fill in every field": "همه فیلدها را کامل کنید",
+  "Public": "عمومی",
+  "Public link copied": "لینک عمومی کپی شد",
+  "Search configs...": "جست‌وجوی کانفیگ‌ها…",
+  "Search groups...": "جست‌وجوی گروه‌ها…",
+  "Sent:": "ارسال شد:",
+  "Service": "سرویس",
+  "Service health": "سلامت سرویس",
+  "Show configuration link": "نمایش لینک کانفیگ",
+  "Show password": "نمایش رمز",
+  "Sign in": "ورود",
+  "Strong": "قوی",
+  "Subscription link copied": "لینک اشتراک کپی شد",
+  "Switch appearance": "تغییر ظاهر",
+  "System": "سیستم",
+  "System online": "سیستم آنلاین",
+  "Test message...": "پیام آزمایشی…",
+  "Toggle theme": "تغییر پوسته",
+  "UUID of an active config": "UUID یک کانفیگ فعال",
+  "Unlimited data": "حجم نامحدود",
+  "Update failed": "آپدیت ناموفق بود",
+  "Usage reset ✓": "مصرف بازنشانی شد ✓",
+  "Very weak": "بسیار ضعیف",
+  "Warning: custom proxy is outside the managed safety boundary": "هشدار: پروکسی دلخواه خارج از محدوده ایمن مدیریت‌شده است",
+  "Weak": "ضعیف",
+  "Workspace navigation": "پیمایش فضای کار",
+  "Copied": "کپی شد",
+  "Copied ✓": "کپی شد ✓",
+  "Refreshes every 8 seconds": "هر ۸ ثانیه تازه‌سازی می‌شود",
+  "Public system availability and live health, presented without exposing administrative controls.": "نمایش عمومی دسترس‌پذیری و سلامت زنده سیستم، بدون آشکارکردن کنترل‌های مدیریتی.",
+  "Quietly fast.": "سریع و بی‌حاشیه.",
+  "FAST · PRIVATE · CONTROLLED": "سریع · خصوصی · کنترل‌شده",
+  "Continue": "ادامه",
+  "Checking": "در حال بررسی",
+  "Custom ALPN value": "مقدار ALPN سفارشی",
+  "Custom proxy · unsafe": "پروکسی دلخواه · ناامن",
+  "IPv4, IPv6 or domain": "IPv4، IPv6 یا دامنه",
+  "Show or hide password": "نمایش یا پنهان‌کردن رمز",
+  "connection": "اتصال",
+  "You have no groups yet": "هنوز گروهی ندارید",
+  "Session length": "مدت نشست",
+  "Copy IP": "کپی IP",
+  "Open GitHub token page": "بازکردن صفحه توکن GitHub",
+  "Open Railway token page": "بازکردن صفحه توکن Railway",
+  "Unsafe custom proxy; configuration may fail or traffic may be exposed.": "پروکسی دلخواه ناامن است؛ ممکن است کانفیگ کار نکند یا ترافیک افشا شود.",
+  "Fetching...": "در حال دریافت…",
+  "● Active · strict": "● فعال · سخت‌گیرانه",
+  "● Active": "● فعال",
+  "● Active v20": "● فعال · نسخه ۲۰",
+  "0 config": "۰ کانفیگ",
+  "Choose a managed HTTP, HTTPS, or SOCKS5 proxy for this config only.": "فقط برای همین کانفیگ یک پروکسی مدیریت‌شده HTTP، HTTPS یا SOCKS5 انتخاب کنید.",
+  "Loading managed proxies…": "در حال بارگذاری پروکسی‌های مدیریت‌شده…",
+  "Warning: leaving the managed safety boundary. This proxy may expose traffic or stop the config.": "هشدار: در حال خروج از محدوده ایمن مدیریت‌شده هستید؛ این پروکسی ممکن است ترافیک را افشا یا کانفیگ را قطع کند.",
+  "0 Group": "۰ گروه",
+  "● Enabled (443)": "● فعال (۴۴۳)",
+  "● optional · SHA-256": "● اختیاری · SHA-256",
+  "JSON File (/data)": "فایل JSON در /data",
+  "e.g. Premium users": "مثلاً کاربران ویژه",
+  "A short note about this group": "یادداشت کوتاه درباره این گروه",
+  "Leave empty = no password": "خالی = بدون رمز",
+  "Empty = current service": "خالی = سرویس فعلی",
+  "Empty = automatic": "خالی = خودکار",
+  "Expiry (days) · 0 = Unlimited": "انقضا (روز) · ۰ = نامحدود",
+  "0 = Unlimited": "۰ = نامحدود",
+  "Lumen Relay · Console": "Lumen Relay · پنل مدیریت",
+  "Command Console · v20": "کنسول مدیریت · نسخه ۲۰",
+  "Lumen Relay · Version 20.0": "Lumen Relay · نسخه ۲۰.۰",
+  "Loading configs...": "در حال بارگذاری کانفیگ‌ها…",
+  "Loading groups...": "در حال بارگذاری گروه‌ها…",
+  "Update to v": "آپدیت به نسخه ",
+  "No password": "بدون رمز",
+  "Create token": "ساخت توکن"
 }</script>
 <script>
 const I18N_FA=JSON.parse(document.getElementById('dashboard-i18n').textContent);
@@ -2059,20 +2230,43 @@ async function authF(url,opts={}){
   return r;
 }
 
-/* ===== Installer-provisioned version updates (no token UI) ===== */
-let updateReleaseState={};
+/* ===== Protected installer/manual update credentials ===== */
+let updateReleaseState={},updateSetupState={},updateOverrideConfirmed=false;
+function setUpdateFieldsLocked(locked){
+  ['update-fork','update-branch','update-railway-token','update-github-token'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=locked});
+  const save=document.getElementById('update-save-btn');if(save)save.style.display=locked?'none':'inline-flex';
+  const unlock=document.getElementById('update-unlock-btn');if(unlock)unlock.style.display=locked?'inline-flex':'none';
+}
+function renderUpdateSetup(setup){
+  updateSetupState=setup||{};const status=document.getElementById('update-credential-status'),note=document.getElementById('update-lock-note');
+  document.getElementById('update-upstream').value=setup.upstream_repo||'highisabella52213/Lumen-Project-Final';
+  document.getElementById('update-fork').value=setup.fork_repo||'';document.getElementById('update-branch').value=setup.branch||'main';
+  document.getElementById('update-railway-token').value='';document.getElementById('update-github-token').value='';
+  document.getElementById('update-railway-state').textContent=tr(setup.railway_token_set?'Saved and protected':'Not saved');
+  document.getElementById('update-github-state').textContent=tr(setup.github_token_set?'Saved and protected':'Not saved');
+  const locked=Boolean(setup.credentials_locked);setUpdateFieldsLocked(locked);updateOverrideConfirmed=false;
+  status.className='update-status-pill'+(setup.configured?' ready':'');status.innerHTML='<i class="ti '+(setup.configured?'ti-shield-check':'ti-alert-circle')+'"></i><span>'+esc(tr(setup.configured?'Ready':'Setup required'))+'</span>';
+  if(!setup.manual_configuration_available){note.className='update-lock-note warn';note.innerHTML='<i class="ti ti-alert-triangle"></i><span>'+esc(tr('Railway deployment context was not detected. Add the tokens as Railway service variables.'))+'</span>';setUpdateFieldsLocked(true);return}
+  if(locked){const key=setup.installed_by_installer?'Installer-managed credentials are filled and locked. Changing them may stop future updates.':'Saved credentials are locked. Unlock only when you need to replace them.';note.className='update-lock-note';note.innerHTML='<i class="ti ti-shield-lock"></i><span>'+esc(tr(key))+'</span>'}
+  else{note.className='update-lock-note';note.innerHTML='<i class="ti ti-info-circle"></i><span>'+esc(tr('Manual deployment detected. Enter both tokens once; Lumen verifies and stores them as protected Railway variables.'))+'</span>'}
+}
 async function loadUpdateStatus(){
   const top=document.getElementById('update-available-btn');
-  try{
-    const r=await authF('/api/update/status');const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not check version');
-    updateReleaseState=d;const ready=Boolean(d.available&&d.configured);top.style.display=ready?'inline-flex':'none';
-    if(ready)top.querySelector('span').textContent=(uiLang==='fa'?'آپدیت به نسخه ':'Update to v')+d.latest_version;
-  }catch(e){if(top)top.style.display='none'}
+  try{const sr=await authF('/api/update/setup');const setup=await sr.json();if(!sr.ok)throw new Error(setup.detail||'Could not load credential settings');renderUpdateSetup(setup)}catch(e){const note=document.getElementById('update-lock-note');if(note){note.className='update-lock-note warn';note.textContent=e.message||tr('Could not load credential settings')}}
+  try{const r=await authF('/api/update/status');const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not check version');updateReleaseState=d;const ready=Boolean(d.available&&d.configured);top.style.display=ready?'inline-flex':'none';if(ready)top.querySelector('span').textContent=(uiLang==='fa'?'آپدیت به نسخه ':'Update to v')+d.latest_version}catch(e){if(top)top.style.display='none'}
+}
+function unlockUpdateCredentials(){
+  if(!confirm(tr('These values control your GitHub and Railway accounts. Incorrect tokens can break updates. Continue?')))return;
+  updateOverrideConfirmed=true;setUpdateFieldsLocked(false);const note=document.getElementById('update-lock-note');note.className='update-lock-note warn';note.innerHTML='<i class="ti ti-alert-triangle"></i><span>'+esc(tr('Protected values are unlocked for this session. Blank token fields keep the saved tokens.'))+'</span>';document.getElementById('update-unlock-btn').style.display='none';
+}
+async function saveUpdateSetup(){
+  const b=document.getElementById('update-save-btn');if(!b||b.disabled)return;b.disabled=true;
+  try{const body={fork_repo:document.getElementById('update-fork').value.trim(),branch:document.getElementById('update-branch').value.trim(),railway_token:document.getElementById('update-railway-token').value.trim(),github_token:document.getElementById('update-github-token').value.trim(),confirm_override:updateOverrideConfirmed};const r=await authF('/api/update/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));document.getElementById('update-railway-token').value='';document.getElementById('update-github-token').value='';if(!r.ok)throw new Error(d.detail||'Could not save credential settings');toast('Credentials saved and verified','ok');renderUpdateSetup(d);await loadUpdateStatus()}catch(e){toast(e.message||'Could not save credential settings','err')}finally{b.disabled=false}
 }
 async function applyLatestUpdate(){
-  if(!confirm(uiLang==='fa'?'فورک همگام و نسخه جدید روی Railway دیپلوی شود؟':'Sync your fork and deploy the latest release now?'))return;
+  if(!confirm(tr('Sync your fork and deploy the latest release now?')))return;
   const b=document.getElementById('update-available-btn');if(b)b.disabled=true;
-  try{const r=await authF('/api/update/apply',{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Update failed');if(d.started){toast(uiLang==='fa'?'دیپلوی نسخه جدید آغاز شد':'Update deployment started','ok');setTimeout(()=>location.reload(),12000)}else{toast(uiLang==='fa'?'همین حالا آخرین نسخه نصب است':'Already on latest version','ok');await loadUpdateStatus()}}catch(e){toast(e.message||'Update failed','err');await loadUpdateStatus()}finally{if(b)b.disabled=false}
+  try{const r=await authF('/api/update/apply',{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Update failed');if(d.started){toast('Update deployment started','ok');setTimeout(()=>location.reload(),12000)}else{toast('Already on latest version','ok');await loadUpdateStatus()}}catch(e){toast(e.message||'Update failed','err');await loadUpdateStatus()}finally{if(b)b.disabled=false}
 }
 
 /* ===== Managed proxy repository per config ===== */

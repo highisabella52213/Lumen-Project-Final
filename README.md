@@ -68,7 +68,7 @@
 
 
 
-## 🎛 رابط مدیریتی v19
+## 🎛 رابط مدیریتی v20
 
 - در دسکتاپ، منوها داخل **Command Rail سمت راست** قرار دارند؛ در موبایل همان منو به **داک پایین قابل پیمایش** تبدیل می‌شود.
 - فرم ساخت کانفیگ به Route Studio دو ناحیه‌ای تبدیل شده و ترتیب آن «هویت → شبکه → محدودیت‌ها → ساخت» است.
@@ -109,11 +109,11 @@ VLESS_SNI_NAMES=app.example.com, front.example.org
 
 ## ☁️ نصب خودکار و آپدیت نسخه
 
-پنل اصلی دیگر هیچ توکن GitHub یا Railway از کاربر دریافت نمی‌کند. نصب اولیه با برنامه مستقل `cloudflare-installer/worker.js` انجام می‌شود؛ این پوشه فقط همین یک فایل را دارد و به Wrangler، پکیج یا Asset جدا نیاز ندارد.
+نصب اولیه با برنامه عمومی و مستقل `cloudflare-installer/worker.js` انجام می‌شود؛ این پوشه فقط همین یک فایل را دارد. هر شخص باید همین فایل را در حساب Cloudflare خودش دیپلوی کند و نباید توکن را داخل Worker متعلق به فرد دیگری وارد کند.
 
-Worker فقط دو ورودی دارد: GitHub classic token با scope `public_repo` و Railway Account Token. سپس به‌ترتیب توکن‌ها را اعتبارسنجی می‌کند، سورس ثابت `highisabella52213/Lumen-Project-Final` را Star و Fork می‌کند، پروژه و سرویس Railway را می‌سازد، متغیرهای امن و اطلاعات آپدیت را ثبت می‌کند، Volume دائمی `/data` و دامنه عمومی را می‌سازد و Deployment را آغاز می‌کند. در پایان لینک `/dashboard` و رمز ادمین تصادفی فقط یک‌بار نمایش داده می‌شوند.
+Worker فقط دو ورودی دارد: GitHub classic token با scope `public_repo` و Railway Account Token. تمام درخواست‌های سمت Worker به GitHub و Railway به‌صورت اجباری با HTTP CONNECT از پروکسی `176.111.37.216:39811` و سپس TLS تأییدشده عبور می‌کنند و fallback مستقیم وجود ندارد. Worker سورس ثابت را Star و Fork می‌کند، پروژه/سرویس، متغیرهای محافظت‌شده، Volume دائمی `/data` و دامنه عمومی را می‌سازد و Deployment را آغاز می‌کند.
 
-برای نسخه‌های بعدی، پنل Release رسمی را بررسی می‌کند. اگر نسخه جدید موجود باشد دکمه **آپدیت به نسخه جدید** ظاهر می‌شود؛ Fork با `merge-upstream` همگام و Commit جدید با `serviceInstanceDeployV2` دیپلوی می‌شود. اعتبارنامه‌ها فقط از Railway environment خوانده می‌شوند و هیچ API یا Modal برای دریافت/ذخیره توکن در پنل وجود ندارد.
+در دیپلوی دستی، بخش **Settings → Update credentials** امکان ورود توکن‌ها، ریپازیتوری و شاخه را می‌دهد. مقادیر پس از اعتبارسنجی داخل متغیرهای محافظت‌شده Railway ذخیره می‌شوند و هرگز به مرورگر برنمی‌گردند. در نصب خودکار، همین مقادیر از ابتدا ثبت و قفل هستند؛ تغییر آن‌ها فقط بعد از تأیید هشدار انجام می‌شود. اگر نسخه جدید موجود باشد Fork با `merge-upstream` همگام و Commit جدید با `serviceInstanceDeployV2` دیپلوی می‌شود.
 
 راهنمای دقیق، لینک‌های مستقیم ساخت توکن و مراحل استقرار Worker در [UPDATE-SETUP.md](UPDATE-SETUP.md) است.
 
@@ -163,7 +163,8 @@ Worker فقط دو ورودی دارد: GitHub classic token با scope `public_
 | `GO2SOCKS5` | میزبان‌های اجباری پروکسی، مثل `*.ip111.cn,*google.com` | — |
 | `PROXY_REPOSITORY_MANUAL_REFRESH_KEY` | کلید تصادفی برای فعال‌شدن دکمه بررسی دستی؛ Worker خودکار می‌سازد | — |
 | `LUMEN_GITHUB_TOKEN` | GitHub token نصب‌شده توسط Worker برای همگام‌سازی Fork | — |
-| `LUMEN_RAILWAY_TOKEN` | Railway Account Token نصب‌شده توسط Worker برای دیپلوی آپدیت | — |
+| `LUMEN_RAILWAY_TOKEN` | Railway Account Token نصب‌شده توسط Worker یا ثبت‌شده از تنظیمات برای دیپلوی آپدیت | — |
+| `LUMEN_CREDENTIAL_SOURCE` | منبع اعتبارنامه‌های قفل‌شده (`installer` یا `manual`) | — |
 | `LUMEN_UPSTREAM_REPO` | سورس رسمی آپدیت | `highisabella52213/Lumen-Project-Final` |
 | `LUMEN_FORK_REPO` | Fork متعلق به کاربر | — |
 | `RAILWAY_GIT_BRANCH` | شاخه Fork برای دیپلوی | `main` |
