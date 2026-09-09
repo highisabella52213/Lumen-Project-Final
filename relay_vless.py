@@ -31,10 +31,20 @@ from main import (
     save_state,
     log_activity,
     now_ir,
+    resolve_exit_endpoints,
 )
+import main as _main
 from speed_limit import QuotaGate, throttle
 import outbound
-from outbound import open_outbound, link_uses_proxy
+from outbound import open_outbound
+
+
+async def _resolve_exact_selection(link, loc_id):
+    resolver = getattr(_main, "resolve_exit_selection", None)
+    if resolver is not None:
+        return await resolver(link, loc_id)
+    endpoints = await resolve_exit_endpoints(link, loc_id)
+    return {"proxy_id": "", "endpoint": endpoints[0], "location_id": loc_id or None} if endpoints else None
 
 # ── Bulk data-plane tuning ───────────────────────────────────────────────────
 READ_MIN = 128 * 1024
@@ -800,6 +810,27 @@ async def relay_tcp_to_ws(
             pass
 
 
+def _loc_param(ws) -> str:
+    """Multi-Location hint from the WS query string, without hard depending on
+    the FastAPI request model (test doubles only provide the raw scope)."""
+    try:
+        qp = getattr(ws, "query_params", None)
+        if qp is not None:
+            return str(qp.get("loc", "") or "")
+    except Exception:
+        pass
+    try:
+        raw = (getattr(ws, "scope", None) or {}).get("query_string", b"")
+        if isinstance(raw, bytes):
+            raw = raw.decode("latin-1")
+        for part in str(raw).split("&"):
+            if part.startswith("loc="):
+                return part[4:][:24]
+    except Exception:
+        pass
+    return ""
+
+
 # ── Tunnel lifecycle ─────────────────────────────────────────────────────────
 async def _collect_header(
     io: _WSIO, early: bytes, *, prefetch_payload: bool = False
@@ -907,8 +938,10 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
 
     writer: asyncio.StreamWriter | None = None
     try:
+        # No payload prefetch: the exit path is chosen independently of the
+        # traffic type, so there is nothing to wait for before connecting.
         _command, address, port, payload, header_bytes = await _collect_header(
-            io, early, prefetch_payload=link_uses_proxy(link)
+            io, early, prefetch_payload=False
         )
         if not await check_and_use(uuid, header_bytes):
             await ws.close(code=1008, reason="quota/disabled")
@@ -920,8 +953,23 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
             conn["bytes"] += header_bytes
         logger.info("WS [%s] -> %s:%d", conn_id, address, port)
 
+        try:
+            exit_selection = await _resolve_exact_selection(link, _loc_param(ws))
+            exit_endpoints = [exit_selection["endpoint"]] if exit_selection else []
+            selected_proxy_id = exit_selection["proxy_id"] if exit_selection else ""
+            if conn is not None:
+                conn["proxy_id"] = selected_proxy_id or None
+                conn["location_id"] = exit_selection.get("location_id") if exit_selection else None
+        except outbound.ProxyUnavailableError as exc:
+            logger.warning("WS [%s] exit proxy unavailable: %s", conn_id, exc)
+            stats["total_errors"] = int(stats.get("total_errors", 0) or 0) + 1
+            error_logs.append(
+                {"error": "exit proxy unavailable", "time": datetime.now().isoformat()}
+            )
+            await ws.close(code=1011, reason="exit proxy unavailable")
+            return
         reader, writer, payload_sent = await open_outbound(
-            address, port, payload, link=link, uuid=uuid
+            address, port, payload, uuid=uuid, endpoints=exit_endpoints, proxy_id=selected_proxy_id
         )
         _tune_socket(writer, WRITE_HW_START)
         if payload and not payload_sent:

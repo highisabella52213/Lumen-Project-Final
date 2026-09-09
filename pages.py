@@ -135,6 +135,7 @@ body{font-family:'Inter','Vazirmatn','Segoe UI',sans-serif;background:var(--md-s
   </div>
 </div>
 <script>
+if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.unregister()))).catch(()=>{})}
 document.getElementById('form').addEventListener('submit',async e=>{
   e.preventDefault();
   const btn=document.getElementById('btn'),err=document.getElementById('err'),et=document.getElementById('err-text');
@@ -631,11 +632,56 @@ a{color:inherit;text-decoration:none}
 .modal-v2-btn-submit:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(168,53,28,.5)}
 .modal-v2-btn-submit:active{transform:translateY(0) scale(.98)}
 
+/* ══════ multi-location modal ══════ */
+.ml-body{padding:18px 22px 20px}
+.ml-switch-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 16px;border-radius:18px;background:var(--md-sys-color-surface-container);border:1px solid var(--md-sys-color-outline-variant)}
+.ml-switch-title{font-size:.86rem;font-weight:800;color:var(--t1)}
+.ml-switch-sub{font-size:.68rem;color:var(--t3);margin-top:4px;line-height:1.6}
+.ml-switch{width:52px;min-width:52px;height:32px;border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-surface-container-highest);border:2px solid var(--md-sys-color-outline);position:relative;cursor:pointer;padding:0;transition:background 200ms var(--md-sys-motion-easing-emphasized),border-color 200ms}
+.ml-switch-thumb{position:absolute;top:4px;inset-inline-start:5px;width:20px;height:20px;border-radius:50%;background:var(--md-sys-color-outline);transition:inset-inline-start 200ms var(--md-sys-motion-easing-emphasized),background 200ms,width 200ms,height 200ms,top 200ms}
+.ml-switch.on{background:var(--md-sys-color-primary);border-color:var(--md-sys-color-primary)}
+.ml-switch.on .ml-switch-thumb{inset-inline-start:25px;top:2px;width:24px;height:24px;background:var(--md-sys-color-on-primary)}
+.ml-remark-preview{margin-top:8px;padding:9px 13px;border-radius:12px;background:var(--md-sys-color-surface-container-high);font-size:.74rem;color:var(--t2);direction:ltr;text-align:start}
+.ml-loc-head{display:flex;align-items:center;justify-content:space-between;font-size:.72rem;font-weight:800;color:var(--t2);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.05em}
+.ml-loc-head i{color:var(--accent)}
+.ml-loc-count{background:var(--accent-d);color:var(--accent2);border-radius:99px;padding:1px 8px;font-size:.62rem}
+.ml-loc-hint{font-size:.62rem;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0}
+.ml-loc-list{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto}
+.ml-loc{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:16px;background:var(--md-sys-color-surface-container-low);border:1px solid var(--md-sys-color-outline-variant)}
+.ml-loc.off{opacity:.55}
+.ml-loc-flag{font-size:20px;line-height:1}
+.ml-loc-info{flex:1;min-width:0}
+.ml-loc-name{font-size:.78rem;font-weight:750;color:var(--t1)}
+.ml-loc-meta{font-size:.62rem;color:var(--t3);margin-top:2px}
+.ml-loc-meta b{color:var(--green-t)}
+.ml-loc-btns{display:flex;gap:4px}
+.ml-icon-btn{width:32px;height:32px;border-radius:10px;border:1px solid var(--card-b);background:var(--md-sys-color-surface-container-high);color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;font-family:inherit}
+.ml-icon-btn:hover:not(:disabled){color:var(--t1);border-color:var(--card-bh)}
+.ml-icon-btn:disabled{opacity:.35;cursor:default}
+.ml-icon-btn.danger:hover{color:var(--red-t);border-color:var(--red)}
+.ml-add{margin-top:14px;padding:14px;border-radius:16px;border:1px dashed var(--md-sys-color-outline-variant);background:var(--md-sys-color-surface-container-lowest)}
+.ml-add>label{display:flex;align-items:center;gap:6px;font-size:.68rem;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+.ml-proxy-pick{display:flex;flex-direction:column;gap:5px;max-height:150px;overflow-y:auto;margin:9px 0}
+.ml-proxy-opt{display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:11px;background:var(--md-sys-color-surface-container-low);font-size:.7rem;cursor:pointer;border:1px solid transparent;color:var(--t2)}
+.ml-proxy-opt:hover{border-color:var(--card-bh)}
+.ml-proxy-opt input{accent-color:var(--accent);width:15px;height:15px}
+.ml-proxy-health{margin-inline-start:auto;font-weight:800;color:var(--t3)}
+.ml-empty{padding:22px 14px;text-align:center;color:var(--t3);font-size:.72rem}
+.ml-chip{display:inline-flex;align-items:center;gap:6px;margin:0 16px 12px;padding:6px 11px;border-radius:999px;background:var(--md-sys-color-tertiary-container);color:var(--md-sys-color-on-tertiary-container);font-size:.64rem;font-weight:750}
+.repo-status-pill{min-height:32px;padding:0 12px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;font-size:.66rem;font-weight:750;background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface-variant);white-space:nowrap}
+.repo-status-pill.ok{background:var(--green-bg);color:var(--green-t)}
+.repo-status-pill.warn{background:var(--amber-bg);color:var(--amber-t)}
+.repo-status-pill.err{background:var(--red-bg);color:var(--red-t)}
+.repo-status-note{margin:10px 18px 0;padding:10px 13px;border-radius:13px;font-size:.68rem;line-height:1.6;display:none;gap:8px;align-items:flex-start}
+.repo-status-note.show{display:flex}
+.repo-status-note.warn{background:var(--amber-bg);color:var(--amber-t)}
+.repo-status-note.err{background:var(--red-bg);color:var(--red-t)}
+
 /* ══════ config picker modal ══════ */
 .lmodal-head{background:linear-gradient(155deg,var(--accent-d) 0%,transparent 70%);padding:22px 24px 18px;position:relative;border-bottom:1px solid var(--card-b)}
 .lmodal-icon-row{display:flex;align-items:center;gap:12px;position:relative;z-index:1}
 .lmodal-icon{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:#fff;font-size:19px;flex-shrink:0;box-shadow:0 6px 16px rgba(24,155,173,.35)}
-.lmodal-title-v2{font-size:14.5px;font-weight:800;color:var(--t1)}
+.lmodal-title-v2{font-size:14.5px;font-weight:800;color:var(--t1)}.lmodal-head .lmodal-title-v2{padding-inline-end:52px;max-width:calc(100vw - 110px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lmodal-sub-v2{font-size:10.5px;color:var(--t3);margin-top:2px}
 .lmodal-search{margin-top:14px;position:relative}
 .lmodal-search input{width:100%;padding:10px 13px 10px 38px;border-radius:11px;border:1px solid var(--card-b);background:rgba(0,0,0,.2);color:var(--t1);font-family:inherit;font-size:12px;outline:none}
@@ -1061,8 +1107,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;ba
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 
 
-/* ════════���══════════════════════════════════════════════════════════════════
-   Lumen Relay v20 · command rail + route studio
+/* ════════���═══════════════════����══════════════════════════════════════════════
+   Lumen Relay v28 · command rail + route studio
    A second expressive composition, intentionally unlike the v11 sidebar.
    ═══════════════════════════════════════════════════════════════════════════ */
 :root{--command-rail-w:108px;--v12-card-gap:18px}
@@ -1076,7 +1122,7 @@ body{padding-right:0}
 /* Builder composition */
 .create-panel{display:grid!important;grid-template-columns:minmax(220px,290px) minmax(0,1fr)!important;align-items:stretch!important;background:var(--md-sys-color-surface-container-lowest)!important;border-radius:36px!important;margin-bottom:26px!important}.cp-head{grid-column:1!important;grid-row:1!important;align-self:stretch!important;flex-direction:column!important;justify-content:flex-start!important;align-items:flex-start!important;gap:20px!important;padding:36px 28px!important;border-radius:36px 0 0 36px!important;background:linear-gradient(155deg,var(--md-sys-color-primary-container),color-mix(in srgb,var(--md-sys-color-tertiary-container) 56%,var(--md-sys-color-primary-container)))!important;position:relative!important;overflow:hidden!important}.cp-head::after{content:'';position:absolute;left:-70px;bottom:-85px;width:240px;height:240px;border-radius:50%;border:36px solid color-mix(in srgb,var(--md-sys-color-primary) 15%,transparent);opacity:.9}.cp-head-icon{width:68px!important;height:68px!important;border-radius:26px 26px 10px 26px!important;font-size:30px!important;box-shadow:0 18px 36px color-mix(in srgb,var(--md-sys-color-on-primary-container) 14%,transparent)!important}.cp-head-title{font-size:1.75rem!important;line-height:1.12!important;letter-spacing:-.045em!important;max-width:8ch}.cp-head-sub{font-size:.82rem!important;line-height:1.75!important;max-width:22ch!important}.cp-head-text{z-index:1!important}.cp-body{grid-column:2!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important;padding:22px!important}.create-panel .cp-row{display:contents!important}.create-panel .cp-body>.cp-block,.create-panel .endpoint-studio,.create-panel .cp-footer,.create-panel .cp-block:has(#nl-speed){grid-column:1/-1!important}.create-panel .cp-block{margin:0!important;padding:20px!important;border-radius:22px!important;background:var(--md-sys-color-surface-container-low)!important;border:1px solid transparent!important;transition:border-color 180ms,transform 260ms var(--md-sys-motion-easing-emphasized)!important}.create-panel .cp-block:focus-within{border-color:var(--md-sys-color-primary)!important;transform:translateY(-2px)!important}.cp-block-label{font-size:.73rem!important;letter-spacing:.055em!important;text-transform:uppercase!important}.cp-mini-row{margin-top:10px!important}.field-caption{font-size:.7rem;line-height:1.55;color:var(--md-sys-color-on-surface-variant);margin-top:10px}.endpoint-studio{padding:0!important;background:var(--md-sys-color-surface-container)!important;border:0!important}.endpoint-studio-head{padding:22px 24px!important}.endpoint-grid{padding:18px!important}.endpoint-field{background:var(--md-sys-color-surface-container-lowest)!important}.cp-footer{display:grid!important;grid-template-columns:1fr auto!important;align-items:center!important;gap:18px!important;padding:18px 4px 4px!important}.cp-footer-note{font-size:.72rem!important;line-height:1.6!important}.cp-submit-btn{min-width:190px!important;min-height:56px!important;border-radius:20px 20px 8px 20px!important;box-shadow:0 14px 30px color-mix(in srgb,var(--md-sys-color-primary) 18%,transparent)!important}
 .config-proxy-studio{grid-column:1/-1!important;background:var(--md-sys-color-surface-container)!important;padding:0!important;overflow:hidden}.config-proxy-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:20px 22px;border-bottom:1px solid var(--md-sys-color-outline-variant)}.config-scope-badge{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border-radius:999px;background:var(--md-sys-color-tertiary-container);color:var(--md-sys-color-on-tertiary-container);font-size:.68rem;font-weight:750;white-space:nowrap}.config-proxy-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.repository-refresh-btn{min-height:40px;border:0;border-radius:999px;padding:0 13px;align-items:center;gap:6px;background:var(--md-sys-color-primary);color:var(--md-sys-color-on-primary);font:700 .7rem inherit;cursor:pointer}.repository-refresh-btn:disabled{opacity:.55;cursor:wait}.config-proxy-grid{padding:18px;display:grid;grid-template-columns:minmax(210px,.7fr) 1.3fr;gap:14px}.proxy-mode-card,.config-proxy-fields{padding:16px;border-radius:18px;background:var(--md-sys-color-surface-container-lowest)}.proxy-mode-card label,.config-proxy-fields label{display:block;font-size:.72rem;font-weight:700;margin-bottom:8px}.config-proxy-fields{grid-template-columns:1fr 130px;gap:12px}.config-proxy-fields:not([style*="display: none"]){display:grid!important}.config-proxy-fields textarea{resize:vertical;min-height:70px}.proxy-safe-note{margin:0 18px 18px;padding:13px 15px;display:flex;gap:9px;align-items:flex-start;border-radius:16px;background:color-mix(in srgb,var(--green) 12%,var(--md-sys-color-surface-container-low));color:var(--md-sys-color-on-surface-variant);font-size:.72rem;line-height:1.6}.proxy-safe-note i{color:var(--green);font-size:18px}.route-proxy{margin:10px 18px 0;min-height:38px;padding:8px 11px;border-radius:13px;display:flex;align-items:center;gap:7px;font-size:.68rem;font-weight:700;background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface-variant)}.route-proxy.enabled{background:var(--md-sys-color-tertiary-container);color:var(--md-sys-color-on-tertiary-container)}.route-proxy code{margin-inline-start:auto;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr}.config-proxy-edit{padding:13px;border-radius:16px;background:var(--md-sys-color-surface-container-low)}@media(max-width:639px){.config-proxy-head{align-items:flex-start;flex-direction:column}.config-proxy-grid{grid-template-columns:1fr}.config-proxy-fields:not([style*="display: none"]){grid-template-columns:1fr!important}}
-.managed-safe,.custom-danger{min-height:48px;padding:11px 13px;border-radius:14px;display:flex;align-items:center;gap:7px;font-size:.68rem;font-weight:700;line-height:1.45}.managed-safe{background:color-mix(in srgb,var(--green) 14%,var(--md-sys-color-surface-container));color:var(--green-t)}.custom-danger{background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container)}.route-proxy.custom{background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container)}
+.proxy-test-detail{margin-top:7px;white-space:pre-line;font-size:.72rem;line-height:1.55;color:var(--t3)}.managed-safe,.custom-danger{min-height:48px;padding:11px 13px;border-radius:14px;display:flex;align-items:center;gap:7px;font-size:.68rem;font-weight:700;line-height:1.45}.managed-safe{background:color-mix(in srgb,var(--green) 14%,var(--md-sys-color-surface-container));color:var(--green-t)}.custom-danger{background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container)}.route-proxy.custom{background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container)}
 /* Configs become a card gallery, not a compressed row/table. */
 .cfg-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:var(--v12-card-gap)!important}.route-card{min-width:0;display:flex;flex-direction:column;background:var(--md-sys-color-surface-container-low);border:1px solid var(--md-sys-color-outline-variant);border-radius:30px;overflow:hidden;transition:transform 320ms var(--md-sys-motion-easing-emphasized),box-shadow 320ms,border-color 180ms}.route-card:hover{transform:translateY(-5px);border-color:var(--md-sys-color-outline);box-shadow:var(--shadow)}.route-card.is-off{opacity:.7}.route-card.is-exp{border-color:color-mix(in srgb,var(--md-sys-color-tertiary) 46%,var(--md-sys-color-outline-variant))}.route-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:22px 22px 16px}.route-title-wrap{display:flex;align-items:flex-start;gap:12px;min-width:0}.route-status-light{width:12px;height:12px;margin-top:6px;border-radius:50%;background:var(--md-sys-color-error);box-shadow:0 0 0 6px color-mix(in srgb,var(--md-sys-color-error) 13%,transparent);flex-shrink:0}.route-status-light.on{background:var(--green);box-shadow:0 0 0 6px color-mix(in srgb,var(--green) 14%,transparent)}.route-label{font:750 1.06rem/1.35 var(--md-ref-typeface-brand);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.route-remark{display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--md-sys-color-on-surface-variant);font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.route-remark i{color:var(--md-sys-color-tertiary)}.route-state{min-height:40px;border:0;border-radius:999px;padding:0 13px;display:flex;align-items:center;gap:6px;background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container);font:700 .7rem inherit;cursor:pointer;flex-shrink:0}.route-state.on{background:var(--green-bg);color:var(--green-t)}.route-network{margin:0 14px;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr) auto;align-items:center;gap:10px;background:var(--md-sys-color-surface-container-high);border-radius:20px}.route-network>div{min-width:0}.route-network span,.route-data span{display:block;font-size:.62rem;letter-spacing:.07em;text-transform:uppercase;color:var(--md-sys-color-on-surface-variant);margin-bottom:4px}.route-network strong{display:block;font:650 .76rem/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.route-arrow{color:var(--md-sys-color-tertiary);font-size:18px}.route-port{padding-inline-start:10px;border-inline-start:1px solid var(--md-sys-color-outline-variant)}.route-data{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;padding:16px 18px}.route-usage{min-width:0}.route-data-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.route-data-head b{font-size:.7rem}.route-meter{height:6px;margin-top:10px;border-radius:99px;background:var(--md-sys-color-surface-container-highest);overflow:hidden}.route-meter i{height:100%;display:block;background:var(--md-sys-color-primary);border-radius:inherit}.route-fact{padding-inline-start:10px;border-inline-start:1px solid var(--md-sys-color-outline-variant);min-width:0}.route-fact strong{font-size:.77rem;white-space:nowrap}.route-fact .exp-chip{font-size:.64rem!important;padding:5px 7px!important}.route-uuid{margin:0 18px 16px;min-height:42px;border:1px dashed var(--md-sys-color-outline-variant);border-radius:14px;background:transparent;color:var(--md-sys-color-on-surface-variant);display:flex;align-items:center;gap:8px;padding:0 12px;cursor:pointer}.route-uuid code{flex:1;min-width:0;text-align:left;direction:ltr;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.68rem}.route-uuid span{font-size:.66rem;font-weight:700;color:var(--md-sys-color-primary)}.route-actions{display:grid;grid-template-columns:minmax(125px,1.2fr) minmax(145px,1fr) repeat(4,48px);gap:7px;padding:12px;background:var(--md-sys-color-surface-container);border-top:1px solid var(--md-sys-color-outline-variant)}.route-action{min-height:48px;border:0;border-radius:16px;background:var(--md-sys-color-surface-container-highest);color:var(--md-sys-color-on-surface);display:flex;align-items:center;justify-content:center;gap:7px;padding:0 12px;cursor:pointer;font:700 .7rem inherit;transition:transform 160ms var(--md-sys-motion-easing-emphasized),border-radius 160ms,background 160ms}.route-action:hover{transform:translateY(-2px)}.route-action:active{transform:scale(.96);border-radius:10px}.route-action.primary{background:var(--md-sys-color-primary);color:var(--md-sys-color-on-primary);border-radius:18px 18px 7px 18px}.route-action.secondary{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}.route-action.compact{padding:0}.route-action.danger{background:var(--md-sys-color-error-container);color:var(--md-sys-color-on-error-container)}
 /* RTL and keyboard */
@@ -1156,6 +1202,52 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
   </div>
 </div>
+<div class="modal-bg" id="modal-ml">
+  <div class="modal-v2" style="max-width:560px">
+    <div class="lmodal-head">
+      <button class="modal-v2-close" onclick="closeModal('modal-ml')"><i class="ti ti-x"></i></button>
+      <div class="lmodal-icon-row">
+        <div class="lmodal-icon"><i class="ti ti-world-share"></i></div>
+        <div>
+          <div class="lmodal-title-v2">Multi-Location · <span id="ml-sub-name" style="color:var(--accent2)">—</span></div>
+          <div class="lmodal-sub-v2">One UUID · one shared quota · exactly two user-selected countries</div>
+        </div>
+      </div>
+    </div>
+    <div class="ml-body">
+      <div class="ml-switch-row">
+        <div class="ml-switch-copy">
+          <div class="ml-switch-title">Enable Multi-Location</div>
+          <div class="ml-switch-sub">Exactly two countries share one UUID and one quota. The user chooses which exact country proxy is used.</div>
+        </div>
+        <button type="button" class="ml-switch" id="ml-enabled" onclick="mlToggleEnabled()" role="switch" aria-checked="false" aria-label="Enable Multi-Location"><span class="ml-switch-thumb"></span></button>
+      </div>
+      <div id="ml-editor" style="display:none">
+        <div class="modal-v2-field" style="margin-top:14px">
+          <label><i class="ti ti-message-2"></i> Client remark text</label>
+          <input class="modal-v2-input endpoint-ltr" id="ml-remark" maxlength="60" placeholder="e.g. My Server" oninput="mlRemarkPreview()">
+          <div class="ml-remark-preview" id="ml-remark-preview">—</div>
+        </div>
+        <div class="ml-loc-head">
+          <span><i class="ti ti-map-pins"></i> Locations <span class="ml-loc-count" id="ml-loc-count">0</span></span>
+          <span class="ml-loc-hint">Exactly two · user choice only · no failover</span>
+        </div>
+        <div class="ml-loc-list" id="ml-loc-list"></div>
+        <div class="ml-add">
+          <label><i class="ti ti-plus"></i> Add location</label>
+          <select class="fs cp-input-full" id="ml-add-country" onchange="mlRenderProxyPick()"></select>
+          <div class="ml-proxy-pick" id="ml-proxy-pick"></div>
+          <button class="btn btn-p btn-sm" id="ml-add-btn" onclick="mlAddLocation()"><i class="ti ti-shield-check"></i> Test & add location</button>
+        </div>
+      </div>
+      <div class="modal-v2-footer">
+        <button class="btn btn-o" onclick="closeModal('modal-ml')" style="flex:.6">Cancel</button>
+        <button class="btn btn-p" onclick="saveMl()"><i class="ti ti-check"></i> Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="modal-edit-link">
   <div class="modal">
     <button class="modal-close" onclick="closeModal('modal-edit-link')"><i class="ti ti-x"></i></button>
@@ -1173,7 +1265,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="fg" style="flex:1"><label>Address (IPv4 / IPv6 / domain)</label><input class="fi endpoint-ltr" id="el-address" placeholder="Empty = current service" style="width:100%"></div>
       <div class="fg" style="flex:1"><label>TLS SNI (domain only)</label><input class="fi endpoint-ltr" id="el-sni" placeholder="Empty = automatic" style="width:100%"></div>
     </div>
-    <div class="fg config-proxy-edit" style="margin-bottom:13px"><label>Exit IP settings</label><select class="fs" id="el-exit-mode" onchange="syncExitProxy('el')" style="width:100%"><option value="direct">Direct — safest default</option><option value="repository">Managed proxy repository</option><option value="custom">Custom proxy — unsafe</option></select><div id="el-repository-fields" style="display:none;margin-top:9px"><select class="fs" id="el-proxy-id" style="width:100%"></select></div><div id="el-custom-fields" style="display:none;margin-top:9px"><input class="fi endpoint-ltr" id="el-custom-proxy" placeholder="http://user:pass@host:port" style="width:100%"><div class="field-caption" style="color:var(--md-sys-color-error)"><i class="ti ti-alert-triangle"></i> Unsafe custom proxy; configuration may fail or traffic may be exposed.</div></div></div>
+    <div class="fg config-proxy-edit" style="margin-bottom:13px"><label>Exit IP settings</label><select class="fs" id="el-exit-mode" onchange="syncExitProxy('el')" style="width:100%"><option value="direct">Direct — safest default</option><option value="repository">Managed proxy repository</option><option value="custom">Custom proxy — unsafe</option></select><div id="el-repository-fields" style="display:none;margin-top:9px"><select class="fs" id="el-proxy-id" onchange="proxySelectionChanged('el')" style="width:100%"></select><div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn btn-o btn-sm" id="el-proxy-test" onclick="testSelectedProxy('el')"><i class="ti ti-shield-check"></i> Test selected proxy</button><span class="managed-safe" id="el-proxy-test-status">Test required</span></div><div class="proxy-test-detail" id="el-proxy-test-detail"></div></div><div id="el-custom-fields" style="display:none;margin-top:9px"><input class="fi endpoint-ltr" id="el-custom-proxy" placeholder="http://user:pass@host:port" style="width:100%"><div class="field-caption" style="color:var(--md-sys-color-error)"><i class="ti ti-alert-triangle"></i> Unsafe custom proxy; configuration may fail or traffic may be exposed.</div></div></div>
     <div class="form-row" style="margin-bottom:13px">
       <div class="fg" style="flex:1"><label>Fingerprint (uTLS)</label>
         <select class="fs" id="el-fp" style="width:100%">
@@ -1202,7 +1294,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <div class="cl"><i class="ti ti-info-circle"></i><span>Leave the expiry field at 0 to keep the current date.</span></div>
     <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-o" onclick="closeModal('modal-edit-link')">Cancel</button>
-      <button class="btn btn-p" onclick="saveEditLink()"><i class="ti ti-check"></i> Save changes</button>
+      <button class="btn btn-p" id="el-save-btn" onclick="saveEditLink()"><i class="ti ti-check"></i> Save changes</button>
     </div>
   </div>
 </div>
@@ -1222,7 +1314,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <button class="sb-close" id="close-sb"><i class="ti ti-x"></i></button>
   <div class="logo">
     <div class="logo-img"><i class="ti ti-shield-bolt"></i></div>
-    <div><div class="logo-name">Lumen Relay</div><div class="logo-sub">Command Console · v20</div></div>
+    <div><div class="logo-name">Lumen Relay</div><div class="logo-sub">Command Console · v28</div></div>
   </div>
   <nav class="nav-wrap" aria-label="Workspace navigation">
     <div class="nav-sec">Workspace</div>
@@ -1285,8 +1377,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="card-title"><i class="ti ti-activity"></i> Service status</div>
       <div class="sr"><span class="sr-k"><i class="ti ti-shield-check"></i> UUID Auth</span><span class="sr-v" style="color:var(--green-t)">● Active · strict</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-circle-check"></i> VLESS / WS Tunnel</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
-      <div class="sr"><span class="sr-k"><i class="ti ti-folders"></i> Sub Groups</span><span class="sr-v" style="color:var(--green-t)">● Active v20</span></div>
+      <div class="sr"><span class="sr-k"><i class="ti ti-folders"></i> Sub Groups</span><span class="sr-v" style="color:var(--green-t)">● Active v28</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-rss"></i> Subscription API</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
+      <div class="sr"><span class="sr-k"><i class="ti ti-database-share"></i> Proxy repository</span><span class="sr-v" id="sr-repo">—</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-clock"></i> Uptime</span><span class="sr-v" id="uptime-inline">—</span></div>
       <div class="sr" style="flex-direction:column;align-items:flex-start;gap:4px">
         <div style="width:100%;display:flex;justify-content:space-between"><span class="sr-k"><i class="ti ti-gauge"></i> Relative load</span><span class="sr-v" id="bw-pct">—%</span></div>
@@ -1299,7 +1392,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
   </div>
   <div class="dash-footer">
-    <span class="df-text">Lumen Relay · Version 20.0</span>
+    <span class="df-text">Lumen Relay · Version 28.0</span>
     
   </div>
 </section>
@@ -1415,7 +1508,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <div><span>Transport Host · fixed</span><code id="endpoint-preview-host">current service</code></div>
         </div>
       </div>
-      <div class="cp-block config-proxy-studio"><div class="config-proxy-head"><div><div class="cp-block-label"><i class="ti ti-world-cog"></i> Exit IP settings</div><div class="endpoint-studio-sub">Choose a managed HTTP, HTTPS, or SOCKS5 proxy for this config only.</div></div><div class="config-proxy-actions"><span class="config-scope-badge"><i class="ti ti-user-shield"></i> Only this config</span><button class="repository-refresh-btn" id="proxy-recheck-btn" style="display:none" onclick="refreshProxyCatalogNow()"><i class="ti ti-refresh"></i><span>Recheck now</span></button></div></div><div class="config-proxy-grid"><div class="proxy-mode-card"><label>Connection mode</label><select class="cp-input-full fs" id="nl-exit-mode" onchange="syncExitProxy('nl')"><option value="direct">Direct — safest default</option><option value="repository">Managed proxy repository</option><option value="custom">Custom proxy — unsafe</option></select></div><div class="config-proxy-fields" id="nl-repository-fields" style="display: none"><div><label>Managed proxy</label><select class="cp-input-full fs" id="nl-proxy-id"><option value="">Loading managed proxies…</option></select></div><div class="managed-safe"><i class="ti ti-shield-check"></i> Managed and verified</div></div><div class="config-proxy-fields" id="nl-custom-fields" style="display: none"><div><label>Custom proxy URL</label><input class="cp-input-full endpoint-ltr" id="nl-custom-proxy" placeholder="socks5://user:pass@host:port"></div><div class="custom-danger"><i class="ti ti-alert-triangle"></i> Warning: leaving the managed safety boundary. This proxy may expose traffic or stop the config.</div></div></div><div class="proxy-safe-note"><i class="ti ti-eye-off"></i><span>Managed endpoints stay server-side. Only flag, country, protocol, and health are shown.</span></div></div>
+      <div class="cp-block config-proxy-studio"><div class="config-proxy-head"><div><div class="cp-block-label"><i class="ti ti-world-cog"></i> Exit IP settings</div><div class="endpoint-studio-sub">Choose a managed exit location for this config only.</div></div><div class="config-proxy-actions"><span class="repo-status-pill" id="repo-status-pill">—</span><span class="config-scope-badge"><i class="ti ti-user-shield"></i> Only this config</span><button class="repository-refresh-btn" id="proxy-recheck-btn" style="display:none" onclick="refreshProxyCatalogNow()"><i class="ti ti-refresh"></i><span>Recheck now</span></button></div></div><div class="config-proxy-grid"><div class="proxy-mode-card"><label>Connection mode</label><select class="cp-input-full fs" id="nl-exit-mode" onchange="syncExitProxy('nl')"><option value="direct">Direct — safest default</option><option value="repository">Managed proxy repository</option><option value="custom">Custom proxy — unsafe</option></select></div><div class="config-proxy-fields" id="nl-repository-fields" style="display: none"><div><label>Managed proxy</label><select class="cp-input-full fs" id="nl-proxy-id" onchange="proxySelectionChanged('nl')"><option value="">Loading managed proxies…</option></select></div><div><button type="button" class="repository-refresh-btn" id="nl-proxy-test" onclick="testSelectedProxy('nl')"><i class="ti ti-shield-check"></i><span>Test selected proxy</span></button><div class="managed-safe" id="nl-proxy-test-status" style="margin-top:8px">Test required</div><div class="proxy-test-detail" id="nl-proxy-test-detail"></div></div></div><div class="config-proxy-fields" id="nl-custom-fields" style="display: none"><div><label>Custom proxy URL</label><input class="cp-input-full endpoint-ltr" id="nl-custom-proxy" placeholder="socks5://user:pass@host:port"></div><div class="custom-danger"><i class="ti ti-alert-triangle"></i> Warning: leaving the managed safety boundary. This proxy may expose traffic or stop the config.</div></div></div><div class="repo-status-note" id="repo-status-note"></div><div class="proxy-safe-note"><i class="ti ti-eye-off"></i><span>Managed endpoints stay server-side. Only the country and flag are shown. Configs in a Multi-Location group follow the group's locations instead.</span></div></div>
       <div class="cp-row">
         <div class="cp-block">
           <div class="cp-block-label"><i class="ti ti-fingerprint"></i> Fingerprint (uTLS)</div>
@@ -1482,7 +1575,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
       <div class="cp-footer">
         <div class="cp-footer-note"><i class="ti ti-info-circle"></i> Every UUID is fully random · only registered UUIDs may connect · the protocol cannot be changed later.</div>
-        <button class="cp-submit-btn" onclick="createLink()"><i class="ti ti-sparkles"></i> Build route</button>
+        <button class="cp-submit-btn" id="nl-submit-btn" onclick="createLink()"><i class="ti ti-sparkles"></i> Build route</button>
       </div>
     </div>
   </div>
@@ -1620,7 +1713,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
     <div class="card">
       <div class="card-title"><i class="ti ti-shield-check"></i> Access control</div>
-      <div class="sr"><span class="sr-k"><i class="ti ti-id-badge"></i> UUID Auth strict</span><span class="sr-v" style="color:var(--green-t)">● Active v20</span></div>
+      <div class="sr"><span class="sr-k"><i class="ti ti-id-badge"></i> UUID Auth strict</span><span class="sr-v" style="color:var(--green-t)">● Active v28</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-toggle-right"></i> Enable / disable config</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-gauge"></i> Traffic quota</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
       <div class="sr"><span class="sr-k"><i class="ti ti-calendar-x"></i> Expiry date</span><span class="sr-v" style="color:var(--green-t)">● Active</span></div>
@@ -1667,7 +1760,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
       <div class="srv-tiles">
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-route"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Default port</div><div class="srv-tile-val">443 (TLS) · can be overridden per config</div></div></div>
-        <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-versions"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Version</div><div class="srv-tile-val">v20.0</div></div></div>
+        <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-versions"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Version</div><div class="srv-tile-val">v28.0</div></div></div>
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-brand-fastapi"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Framework</div><div class="srv-tile-val">FastAPI + Uvicorn</div></div></div>
         <div class="srv-tile"><div class="srv-tile-icon"><i class="ti ti-cloud"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Platform</div><div class="srv-tile-val">Railway</div></div></div>
         <div class="srv-tile" style="grid-column:1/-1"><div class="srv-tile-icon"><i class="ti ti-device-floppy"></i></div><div class="srv-tile-text"><div class="srv-tile-label">Storage</div><div class="srv-tile-val">JSON File (/data)</div></div></div>
@@ -1791,7 +1884,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Light mode": "حالت روشن",
   "Dark mode": "حالت تاریک",
   "Sign out": "خروج",
-  "Relay overview": "نمای کلی رله",
+  "Relay overview": "نمای کلی ��له",
   "Loading...": "در حال بارگذاری…",
   "Active": "فعال",
   "Refresh": "تازه‌سازی",
@@ -1865,10 +1958,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "icon.": "بزنید.",
   "Full subscription (admin)": "اشتراک کامل (مدیر)",
   "Includes every active config.": "شامل همه کانفیگ‌های فعال است.",
-  "This address only works in the browser that is signed in to the panel (session cookie required).": "این آدرس فقط در مرورگری کار می‌کند که وارد پنل شده باشد.",
+  "This address only works in the browser that is signed in to the panel (session cookie required).": "این آدرس فقط در مر��رگ����ی کار می‌کند که وارد پنل شده باشد.",
   "Group subscription links": "لینک‌های اشتراک گروه‌ها",
   "Loading groups…": "در حال بارگذاری گروه‌ها…",
-  "Bandwidth usage analytics and monitoring": "تحلیل و پایش مصرف پهنای باند",
+  "Bandwidth usage analytics and monitoring": "تحلیل و پایش مصر�� پهنای باند",
   "Total traffic used": "کل ترافیک مصرف‌شده",
   "Hourly average": "میانگین ساعتی",
   "MB per hour": "MB در ساعت",
@@ -1985,7 +2078,43 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Managed proxy": "پروکسی مدیریت‌شده",
   "Managed and verified": "مدیریت‌شده و تأییدشده",
   "Custom proxy URL": "آدرس پروکسی دلخواه",
-  "Managed endpoints stay server-side. Only flag, country, protocol, and health are shown.": "آدرس‌های مدیریت‌شده فقط در سرور می‌مانند؛ فقط پرچم، کشور، پروتکل و سلامت نمایش داده می‌شود.",
+  "Managed endpoints stay server-side. Only the country, flag, and health are shown. Configs in a Multi-Location group follow the group's locations instead.": "آدرس‌های مدیریت‌شده فقط در سرور می‌مانند؛ فقط کشور، پرچم و سلامت نمایش داده می‌شود. کانفیگ‌های عضو گروه Multi-Location از لوکیشن‌های گروه پیروی می‌کنند.",
+  "Choose a managed exit location for this config only.": "یک لوکیشن خروجی مدیریت‌شده فقط برای همین کانفیگ انتخاب کنید.",
+  "Multi-Location": "چندلوکیشنه",
+  "Multi-Location · ": "چندلوکیشنه · ",
+  "Enable Multi-Location": "فعال‌سازی Multi-Location",
+  "One UUID · one shared quota · exactly two user-selected countries": "یک UUID و یک سهمیه مشترک برای هر کانفیگ — چند لوکیشن خروجی",
+  "Exactly two countries share one UUID and one quota. The user chooses which exact country proxy is used.": "هر لوکیشن فعال یک ورودی جدا در اشتراک گروه می‌سازد — همان UUID و سهمیه، بدون کانفیگ تکراری.",
+  "Client remark text": "متن Remark کلاینت",
+  "First location is the default": "اولین لوکیشن پیش‌فرض است",
+  "Locations": "لوکیشن‌ها",
+  "Add location": "افزودن لوکیشن",
+  "No more locations available": "لوکیشن بیشتری در دسترس نیست",
+  "No proxies for this location yet": "فعلاً پروکسی برای این لوکیشن نیست",
+  "No locations yet — add at least one country below": "هنوز لوکیشنی نیست — حداقل یک کشور از پایین اضافه کنید",
+  "proxies live": "پروکسی فعال",
+  "proxies": "پروکسی",
+  "locations": "لوکیشن",
+  "Pick a country first": "اول یک کشور انتخاب کنید",
+  "Select at least one proxy": "حداقل یک پروکسی انتخاب کنید",
+  "Add at least one location or disable Multi-Location": "حداقل یک لوکیشن اضافه کنید یا Multi-Location را غیرفعال کنید",
+  "Multi-Location saved ✓": "Multi-Location ذخیره شد ✓",
+  "Group not loaded yet": "گروه هنوز بارگذاری نشده",
+  "Loading managed proxies…": "در حال بارگذاری پروکسی‌های مدیریت‌شده…",
+  "Loading…": "در حال بار��ذاری…",
+  "Last known list": "آخرین لیست شناخته‌شده",
+  "Sync issue": "اختلال همگام‌سازی",
+  "Temporarily unavailable": "موقتاً در دسترس نیست",
+  "Unavailable": "در دسترس نیست",
+  "Not configured": "پیکربندی نشده",
+  "Live": "فعال",
+  "The repository check failed; the last known proxy list is still in use.": "بررسی مخزن ناموفق بود؛ آخرین لیست سالم پروکسی همچنان استفاده می‌شود.",
+  "The managed repository could not be reached. Retrying automatically in the background.": "مخزن مدیریت‌شده در دسترس نبود؛ تلاش مجدد خودکار در پس‌زمینه انجام می‌شود.",
+  "The managed repository is not configured on this server. You can still use Direct or a custom proxy.": "مخزن مدیریت‌شده روی این سرور پیکربندی نشده است. همچنان می‌توانید مستقیم یا پروکسی دلخواه استفاده کنید.",
+  "Proxy repository": "مخزن پروکسی",
+  "Disabled": "غیرفعال",
+  "Move up": "بالا",
+  "Move down": "پایین",
   "Recheck now": "بررسی جدید",
   "Repository checked again": "مخزن دوباره بررسی شد",
   "Refresh failed": "بررسی جدید ناموفق بود",
@@ -2020,7 +2149,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Leave empty to keep saved token": "برای نگه‌داشتن توکن ذخیره‌شده خالی بگذارید",
   "Created at railway.com/account/tokens. This is a broad credential; use a dedicated token and rotate it if exposed.": "از railway.com/account/tokens ساخته می‌شود. این دسترسی گسترده است؛ توکن اختصاصی بسازید و در صورت افشا فوراً آن را تغییر دهید.",
   "Required because Railway cannot modify a GitHub fork. Grant repository Contents write access only to this fork.": "ضروری است چون Railway نمی‌تواند فورک گیت‌هاب را تغییر دهد. دسترسی نوشتن Contents را فقط برای همین فورک بدهید.",
-  "Version 19.1.0 is ready. Your fork will be synced before Railway deploys it.": "نسخه 19.1.0 آماده است؛ ابتدا فورک همگام و سپس روی Railway دیپلوی می‌شود.",
+  "Version 19.1.0 is ready. Your fork will be synced before Railway deploys it.": "نسخه 19.1.0 آماده است؛ اب��دا فورک همگام و سپس روی Railway دیپلوی می‌شود.",
   "Synchronizing fork and starting Railway deployment…": "در حال همگام‌سازی فورک و شروع دیپلوی Railway…",
   "Deployment started. This panel may reconnect during the update.": "دیپلوی شروع شد؛ ممکن است پنل هنگام آپدیت دوباره متصل شود.",
   "Update credentials": "اعتبارنامه‌های به‌روزرسانی",
@@ -2039,8 +2168,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Change protected values": "تغییر مقادیر قفل‌شده",
   "Ready": "آماده",
   "Setup required": "نیازمند تنظیم",
-  "Railway deployment context was not detected. Add the tokens as Railway service variables.": "اطلاعات محیط دیپلوی Railway شناسایی نشد؛ توکن‌ها را به‌صورت متغیر سرویس Railway اضافه کنید.",
-  "Installer-managed credentials are filled and locked. Changing them may stop future updates.": "اعتبارنامه‌های نصب‌کننده ثبت و قفل شده‌اند؛ تغییر اشتباه آن‌ها ممکن است آپدیت‌های بعدی را متوقف کند.",
+  "Railway deployment context was not detected. Add the tokens as Railway service variables.": "��طلاعات محیط دیپلوی Railway شناسایی نشد؛ توکن‌ها را به‌صورت متغیر سرویس Railway اضافه کنید.",
+  "Installer-managed credentials are filled and locked. Changing them may stop future updates.": "اعتبارنامه‌های نصب‌کننده ثبت و قفل شده‌اند؛ تغییر اشتباه آن‌��ا ممکن است آپدیت‌های بعدی را متوقف کند.",
   "Saved credentials are locked. Unlock only when you need to replace them.": "اعتبارنامه‌های ذخیره‌شده قفل هستند؛ فقط برای جایگزینی آن‌ها قفل را باز کنید.",
   "Manual deployment detected. Enter both tokens once; Lumen verifies and stores them as protected Railway variables.": "دیپلوی دستی شناسایی شد؛ هر دو توکن را یک‌بار وارد کنید تا لومن آن‌ها را بررسی و به‌صورت متغیر محافظت‌شده Railway ذخیره کند.",
   "These values control your GitHub and Railway accounts. Incorrect tokens can break updates. Continue?": "این مقادیر به حساب‌های GitHub و Railway دسترسی دارند. توکن اشتباه می‌تواند آپدیت‌ها را از کار بیندازد؛ ادامه می‌دهید؟",
@@ -2101,7 +2230,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Show password": "نمایش رمز",
   "Sign in": "ورود",
   "Strong": "قوی",
-  "Subscription link copied": "لینک اشتراک کپی شد",
+  "Subscription link copied": "لینک اشت��اک کپی شد",
   "Switch appearance": "تغییر ظاهر",
   "System": "سیستم",
   "System online": "سیستم آنلاین",
@@ -2120,7 +2249,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Refreshes every 8 seconds": "هر ۸ ثانیه تازه‌سازی می‌شود",
   "Public system availability and live health, presented without exposing administrative controls.": "نمایش عمومی دسترس‌پذیری و سلامت زنده سیستم، بدون آشکارکردن کنترل‌های مدیریتی.",
   "Quietly fast.": "سریع و بی‌حاشیه.",
-  "FAST · PRIVATE · CONTROLLED": "سریع · خصوصی · کنترل‌شده",
+  "FAST · PRIVATE · CONTROLLED": "سریع · خصوص�� · کنترل‌شده",
   "Continue": "ادامه",
   "Checking": "در حال بررسی",
   "Custom ALPN value": "مقدار ALPN سفارشی",
@@ -2137,7 +2266,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Fetching...": "در حال دریافت…",
   "● Active · strict": "● فعال · سخت‌گیرانه",
   "● Active": "● فعال",
-  "● Active v20": "● فعال · نسخه ۲۰",
+  "● Active v28": "● فعال · نسخه ۲۸",
   "0 config": "۰ کانفیگ",
   "Choose a managed HTTP, HTTPS, or SOCKS5 proxy for this config only.": "فقط برای همین کانفیگ یک پروکسی مدیریت‌شده HTTP، HTTPS یا SOCKS5 انتخاب کنید.",
   "Loading managed proxies…": "در حال بارگذاری پروکسی‌های مدیریت‌شده…",
@@ -2154,8 +2283,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   "Expiry (days) · 0 = Unlimited": "انقضا (روز) · ۰ = نامحدود",
   "0 = Unlimited": "۰ = نامحدود",
   "Lumen Relay · Console": "Lumen Relay · پنل مدیریت",
-  "Command Console · v20": "کنسول مدیریت · نسخه ۲۰",
-  "Lumen Relay · Version 20.0": "Lumen Relay · نسخه ۲۰.۰",
+  "Command Console · v28": "کنسول مدیر��ت · نسخه ۲۸",
+  "Lumen Relay · Version 28.0": "Lumen Relay · نسخه ۲۸.۰",
   "Loading configs...": "در حال بارگذاری کانفیگ‌ها…",
   "Loading groups...": "در حال بارگذاری گروه‌ها…",
   "Update to v": "آپدیت به نسخه ",
@@ -2189,7 +2318,7 @@ function applyLanguage(){
 }
 function toggleLanguage(){uiLang=uiLang==='en'?'fa':'en';localStorage.setItem('lumen-ui-lang',uiLang);applyLanguage();applyTheme(isDark);if(typeof loadUpdateStatus==='function')loadUpdateStatus(false)}
 const _i18nObserver=new MutationObserver(entries=>entries.forEach(e=>e.addedNodes.forEach(n=>{if(n.nodeType===1)translateTree(n);else if(n.nodeType===3&&n.parentElement)translateTree(n.parentElement)})));
-let isDark=localStorage.getItem('x4g-theme')!=='light';
+let isDark=localStorage.getItem('code-theme')!=='light';
 function applyTheme(dark){
   document.documentElement.setAttribute('data-theme',dark?'dark':'light');
   const icon=dark?'ti-sun':'ti-moon',label=tr(dark?'Light mode':'Dark mode');
@@ -2197,7 +2326,7 @@ function applyTheme(dark){
   document.getElementById('theme-label').textContent=label;
   const mobI=document.getElementById('theme-mob-icon');if(mobI)mobI.className='ti '+icon;
 }
-function toggleTheme(){isDark=!isDark;localStorage.setItem('x4g-theme',isDark?'dark':'light');applyTheme(isDark)}
+function toggleTheme(){isDark=!isDark;localStorage.setItem('code-theme',isDark?'dark':'light');applyTheme(isDark)}
 applyTheme(isDark);applyLanguage();_i18nObserver.observe(document.body,{childList:true,subtree:true});
 function toast(msg,type=''){
   const t=document.getElementById('toast');
@@ -2221,14 +2350,66 @@ function protoBadge(p){
   const v=m[p]||m['vless-ws'];
   return `<span class="proto-chip ${v[1]}">${v[0]}</span>`;
 }
-async function checkAuth(){try{const r=await fetch('/api/me');const d=await r.json();if(!d.authenticated)location.href='/login';}catch(e){location.href='/login'}}
-async function logout(){try{await fetch('/api/logout',{method:'POST'})}catch(e){}location.href='/login'}
-document.getElementById('logout-btn').addEventListener('click',logout);
-async function authF(url,opts={}){
-  const r=await fetch(url,opts);
-  if(r.status===401){location.href='/login';throw new Error('unauthorized')}
-  return r;
+const apiDiagnostics={lastFailure:null,retries:0,authRedirects:0};
+window.__codeApiDiagnostics=apiDiagnostics;
+const DIAG_STORAGE_KEY='code-dashboard-forensic-v1';
+const DIAG_ENABLED_KEY='code-dashboard-forensic-enabled';
+let diagnosticsEnabled=false,diagnosticEvents=[],diagnosticOutbox=[],diagnosticFlushTimer=null;
+try{if(new URLSearchParams(String(location.search||'')).get('diagnostics')==='1')sessionStorage.setItem(DIAG_ENABLED_KEY,'1');diagnosticsEnabled=sessionStorage.getItem(DIAG_ENABLED_KEY)==='1';diagnosticEvents=JSON.parse(sessionStorage.getItem(DIAG_STORAGE_KEY)||'[]');if(!Array.isArray(diagnosticEvents))diagnosticEvents=[]}catch(_){diagnosticEvents=[]}
+const dashboardBootId=(globalThis.crypto&&crypto.randomUUID)?crypto.randomUUID():('boot-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10));
+const dashboardBootCount=(diagnosticEvents.filter(e=>e&&e.kind==='DOCUMENT_BOOT').length+1);
+window.__codeDashboardDiagnostics={enabled:diagnosticsEnabled,bootId:dashboardBootId,get events(){return diagnosticEvents.slice()}};
+function diagnosticPath(value){try{return new URL(String(value||'/'),location.origin||'https://dashboard.invalid').pathname||'/'}catch(_){const raw=String(value||'/').split('?',1)[0];return raw.startsWith('/')?raw:'/'}}
+function diagnosticStack(){try{return String(new Error().stack||'').split('\n').slice(2,9).join('\n').slice(0,1600)}catch(_){return ''}}
+function updateDiagnosticPanel(){const out=document.getElementById('forensic-diagnostic-output');if(out)out.textContent=diagnosticEvents.slice(-30).map(e=>`${e.at_ms} ${e.kind}${e.path?' '+e.path:''}${e.status?' '+e.status:''}${e.classification?' '+e.classification:''}${e.reason?' '+e.reason:''}`).join('\n')}
+function flushDiagnostics(unload=false){if(!diagnosticsEnabled||!diagnosticOutbox.length)return;const batch=diagnosticOutbox.splice(0,80);const body=JSON.stringify({events:batch});if(unload&&navigator.sendBeacon){try{navigator.sendBeacon('/api/diagnostics/client',new Blob([body],{type:'application/json'}));return}catch(_){}}
+  fetch('/api/diagnostics/client',{method:'POST',headers:{'Content-Type':'application/json'},body,credentials:'same-origin',keepalive:true,cache:'no-store'}).catch(()=>{});
 }
+function scheduleDiagnosticFlush(){if(!diagnosticsEnabled||diagnosticFlushTimer)return;diagnosticFlushTimer=setTimeout(()=>{diagnosticFlushTimer=null;flushDiagnostics(false)},250)}
+function recordDiagnostic(kind,detail={}){if(!diagnosticsEnabled)return;const event={kind,at_ms:Date.now(),boot_id:dashboardBootId,boot_count:dashboardBootCount,...detail};if(event.path)event.path=diagnosticPath(event.path);diagnosticEvents.push(event);diagnosticEvents=diagnosticEvents.slice(-160);diagnosticOutbox.push(event);try{sessionStorage.setItem(DIAG_STORAGE_KEY,JSON.stringify(diagnosticEvents))}catch(_){}updateDiagnosticPanel();scheduleDiagnosticFlush()}
+function mountDiagnostics(){if(!diagnosticsEnabled||document.getElementById('forensic-diagnostics'))return;const panel=document.createElement('details');panel.id='forensic-diagnostics';panel.style.cssText='position:fixed;right:12px;bottom:12px;z-index:99999;max-width:min(560px,calc(100vw - 24px));padding:10px 12px;border:1px solid var(--md-sys-color-outline);border-radius:14px;background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface);font:12px ui-monospace,monospace;box-shadow:0 8px 24px rgba(0,0,0,.28)';panel.innerHTML='<summary>Forensic diagnostics enabled</summary><div style="margin:8px 0">Boot <code id="forensic-boot"></code></div><button type="button" id="forensic-copy">Copy safe timeline</button><pre id="forensic-diagnostic-output" style="max-height:220px;overflow:auto;white-space:pre-wrap"></pre>';document.body.appendChild(panel);document.getElementById('forensic-boot').textContent=dashboardBootId;document.getElementById('forensic-copy').addEventListener('click',()=>navigator.clipboard?.writeText(JSON.stringify(diagnosticEvents,null,2)).then(()=>toast('Safe diagnostics copied','ok')));updateDiagnosticPanel()}
+function dashboardNavigate(kind,target,reason){recordDiagnostic(kind,{path:target,reason,stack:diagnosticStack()});if(kind==='LOCATION_REPLACE')return location.replace(target);if(kind==='LOCATION_ASSIGN')return location.assign(target);throw new Error('Unsupported dashboard navigation action')} 
+// Compatibility wrapper retained for the diagnostic/navigation API used by the deployed build.
+function forensicNavigate(kind,target,reason){return dashboardNavigate(kind==='AUTH_REDIRECT'?'LOCATION_REPLACE':kind,target,reason)}
+function authRedirect(reason){if(window.__codeAuthRedirecting)return;window.__codeAuthRedirecting=true;apiDiagnostics.authRedirects++;recordDiagnostic('AUTH_REDIRECT',{path:'/login',reason,stack:diagnosticStack()});dashboardNavigate('LOCATION_REPLACE','/login',reason)}
+function installNavigationDiagnostics(){if(!diagnosticsEnabled)return;recordDiagnostic('DOCUMENT_BOOT',{path:location.pathname||'/',navigation_type:performance.getEntriesByType?.('navigation')?.[0]?.type||'unknown'});for(const [name,kind] of [['pushState','HISTORY_PUSH'],['replaceState','HISTORY_REPLACE']]){try{const original=history[name];history[name]=function(...args){recordDiagnostic(kind,{path:args[2]||location.pathname,stack:diagnosticStack()});return original.apply(this,args)}}catch(_){}}try{const originalOpen=window.open;window.open=function(...args){recordDiagnostic('WINDOW_OPEN',{path:args[0]||'/',stack:diagnosticStack()});return originalOpen.apply(this,args)}}catch(_){}window.addEventListener?.('popstate',()=>recordDiagnostic('ROUTER_NAVIGATION',{path:location.pathname,reason:'popstate'}));window.addEventListener?.('pageshow',e=>recordDiagnostic('PAGE_SHOW',{path:location.pathname,reason:e.persisted?'bfcache':'normal'}));window.addEventListener?.('pagehide',()=>{recordDiagnostic('PAGE_HIDE',{path:location.pathname});flushDiagnostics(true)});window.addEventListener?.('beforeunload',()=>{recordDiagnostic('BEFORE_UNLOAD',{path:location.pathname,stack:diagnosticStack()});flushDiagnostics(true)});window.addEventListener?.('error',e=>recordDiagnostic('UNCAUGHT_ERROR',{path:location.pathname,error_type:e.error?.name||'Error',reason:String(e.message||'error').slice(0,120)}));window.addEventListener?.('unhandledrejection',e=>recordDiagnostic('UNHANDLED_REJECTION',{path:location.pathname,error_type:e.reason?.name||'UnhandledRejection'}));document.addEventListener?.('visibilitychange',()=>recordDiagnostic('VISIBILITY_CHANGE',{path:location.pathname,visibility:document.visibilityState||'unknown'}))}
+function disableUnexpectedServiceWorkers(){const workerApi=globalThis.navigator?.serviceWorker;if(!workerApi)return;workerApi.addEventListener('controllerchange',()=>recordDiagnostic('SERVICE_WORKER_CONTROLLER_CHANGE',{path:location.pathname,reason:'controllerchange'}));workerApi.getRegistrations().then(async registrations=>{recordDiagnostic('SERVICE_WORKER_NAVIGATION',{path:location.pathname,reason:`registrations:${registrations.length}`});for(const registration of registrations){try{await registration.unregister()}catch(_){}}}).catch(()=>{})}
+installNavigationDiagnostics();disableUnexpectedServiceWorkers();
+class ApiRequestError extends Error{constructor(message,kind,url,status=0){super(message);this.name='ApiRequestError';this.kind=kind;this.url=url;this.status=status}}
+function waitMs(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+async function apiRequest(url,opts={},policy={}){
+  const retries=Number.isInteger(policy.retries)?policy.retries:2;
+  const timeoutMs=policy.timeoutMs||10000;
+  const method=String(opts.method||'GET').toUpperCase();
+  for(let attempt=0;attempt<=retries;attempt++){
+    const started=performance.now();const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);
+    recordDiagnostic('FETCH_START',{path:url,method,attempt,classification:'PENDING'});
+    try{
+      const r=await fetch(url,{...opts,cache:opts.cache||'no-store',credentials:'same-origin',signal:controller.signal});
+      clearTimeout(timer);const duration_ms=Math.round(performance.now()-started);const classification=r.status===401?'AUTH_EXPIRED':r.status===403?'FORBIDDEN':r.status>=500?'SERVER_ERROR':r.ok?'OK':'HTTP_ERROR';
+      recordDiagnostic('FETCH_RESPONSE',{path:url,method,attempt,status:r.status,duration_ms,classification});
+      if(r.status===401){if(policy.authoritativeAuth===true){apiDiagnostics.lastFailure={url,kind:'AUTH_EXPIRED',status:401,at:Date.now()};authRedirect('authoritative /api/me returned 401');throw new ApiRequestError('Authentication expired','AUTH_EXPIRED',url,401)}apiDiagnostics.lastFailure={url,kind:'FEATURE_UNAUTHORIZED',status:401,at:Date.now()};recordDiagnostic('FEATURE_UNAUTHORIZED',{path:url,method,attempt,status:401,classification:'FEATURE_UNAUTHORIZED'});return r}
+      if(r.status===403){apiDiagnostics.lastFailure={url,kind:'FORBIDDEN',status:403,at:Date.now()};return r}
+      if(r.status>=500&&attempt<retries){apiDiagnostics.retries++;await waitMs(300*(2**attempt));continue}
+      if(r.status>=500)apiDiagnostics.lastFailure={url,kind:'SERVER_ERROR',status:r.status,at:Date.now()};
+      return r;
+    }catch(error){
+      clearTimeout(timer);if(error instanceof ApiRequestError)throw error;
+      const timedOut=controller.signal.aborted;const kind=timedOut?'NETWORK_TIMEOUT':'NETWORK_ERROR';const duration_ms=Math.round(performance.now()-started);
+      recordDiagnostic('FETCH_ERROR',{path:url,method,attempt,duration_ms,classification:kind,error_type:error?.name||'Error',reason:timedOut?'timeout':'network'});
+      apiDiagnostics.lastFailure={url,kind,status:0,at:Date.now()};
+      if(attempt<retries){apiDiagnostics.retries++;await waitMs(300*(2**attempt));continue}
+      throw new ApiRequestError(kind==='NETWORK_TIMEOUT'?'Request timed out':'Network request failed',kind,url);
+    }
+  }
+}
+async function checkAuth(){
+  try{const r=await apiRequest('/api/me',{}, {retries:1,timeoutMs:8000,authoritativeAuth:true});if(!r.ok){recordDiagnostic('AUTH_CHECK_FAILED',{path:'/api/me',status:r.status,classification:'AUTH_CHECK_FAILED'});return false}const d=await r.json();if(!d.authenticated){recordDiagnostic('AUTH_STATE',{path:'/api/me',classification:'NOT_AUTHENTICATED'});authRedirect('api/me returned authenticated=false');return false}recordDiagnostic('AUTH_STATE',{path:'/api/me',classification:'AUTHENTICATED'});return true}
+  catch(e){if(e.kind!=='AUTH_EXPIRED'){recordDiagnostic('AUTH_CHECK_FAILED',{path:'/api/me',classification:e.kind||'AUTH_CHECK_FAILED'});toast('Dashboard is temporarily offline. Retrying in the background.','err')}return false}
+}
+async function logout(){try{await apiRequest('/api/logout',{method:'POST'},{retries:0,timeoutMs:5000})}catch(e){}dashboardNavigate('LOCATION_ASSIGN','/login','user logout')}
+document.getElementById('logout-btn').addEventListener('click',logout);
+async function authF(url,opts={},policy={}){return apiRequest(url,opts,policy)}
 
 /* ===== Protected installer/manual update credentials ===== */
 let updateReleaseState={},updateSetupState={},updateOverrideConfirmed=false;
@@ -2250,10 +2431,15 @@ function renderUpdateSetup(setup){
   if(locked){const key=setup.installed_by_installer?'Installer-managed credentials are filled and locked. Changing them may stop future updates.':'Saved credentials are locked. Unlock only when you need to replace them.';note.className='update-lock-note';note.innerHTML='<i class="ti ti-shield-lock"></i><span>'+esc(tr(key))+'</span>'}
   else{note.className='update-lock-note';note.innerHTML='<i class="ti ti-info-circle"></i><span>'+esc(tr('Manual deployment detected. Enter both tokens once; Lumen verifies and stores them as protected Railway variables.'))+'</span>'}
 }
+let _updateStatusPromise=null;
 async function loadUpdateStatus(){
+  if(_updateStatusPromise)return _updateStatusPromise;
+  _updateStatusPromise=(async()=>{
   const top=document.getElementById('update-available-btn');
   try{const sr=await authF('/api/update/setup');const setup=await sr.json();if(!sr.ok)throw new Error(setup.detail||'Could not load credential settings');renderUpdateSetup(setup)}catch(e){const note=document.getElementById('update-lock-note');if(note){note.className='update-lock-note warn';note.textContent=e.message||tr('Could not load credential settings')}}
   try{const r=await authF('/api/update/status');const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not check version');updateReleaseState=d;const ready=Boolean(d.available&&d.configured);top.style.display=ready?'inline-flex':'none';if(ready)top.querySelector('span').textContent=(uiLang==='fa'?'آپدیت به نسخه ':'Update to v')+d.latest_version}catch(e){if(top)top.style.display='none'}
+  })();
+  try{return await _updateStatusPromise}finally{_updateStatusPromise=null}
 }
 function unlockUpdateCredentials(){
   if(!confirm(tr('These values control your GitHub and Railway accounts. Incorrect tokens can break updates. Continue?')))return;
@@ -2266,16 +2452,75 @@ async function saveUpdateSetup(){
 async function applyLatestUpdate(){
   if(!confirm(tr('Sync your fork and deploy the latest release now?')))return;
   const b=document.getElementById('update-available-btn');if(b)b.disabled=true;
-  try{const r=await authF('/api/update/apply',{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Update failed');if(d.started){toast('Update deployment started','ok');setTimeout(()=>location.reload(),12000)}else{toast('Already on latest version','ok');await loadUpdateStatus()}}catch(e){toast(e.message||'Update failed','err');await loadUpdateStatus()}finally{if(b)b.disabled=false}
+  try{const r=await authF('/api/update/apply',{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Update failed');if(d.started){toast('Update deployment started. This page will stay stable while the service returns.','ok');for(let attempt=0;attempt<12;attempt++){await waitMs(Math.min(15000,3000+attempt*1000));try{const ready=await apiRequest('/health',{}, {retries:0,timeoutMs:5000});if(ready.ok){location.assign('/dashboard');return}}catch(_){}}toast('Deployment is still starting. Use Refresh when ready.','err')}else{toast('Already on latest version','ok');await loadUpdateStatus()}}catch(e){toast(e.message||'Update failed','err');await loadUpdateStatus()}finally{if(b)b.disabled=false}
 }
 
 /* ===== Managed proxy repository per config ===== */
 let managedProxyCatalog=[];
-function managedOption(p){return `<option value="${esc(p.id)}">${esc((p.flag||'🌐')+' '+p.country+' · '+p.health+'% · '+p.type.toUpperCase())}</option>`}
-async function loadProxyCatalog(){const btn=document.getElementById('proxy-recheck-btn');try{const sr=await authF('/api/proxy-catalog/manual-status');const state=await sr.json();if(btn)btn.style.display=state.enabled?'inline-flex':'none'}catch(e){if(btn)btn.style.display='none'}try{const r=await authF('/api/proxy-catalog');const d=await r.json();managedProxyCatalog=d.proxies||[];if(btn&&d.status?.manual_refresh_enabled)btn.style.display='inline-flex';['nl-proxy-id','el-proxy-id'].forEach(id=>{const e=document.getElementById(id);if(!e)return;const old=e.value;e.innerHTML='<option value="">— Choose managed proxy —</option>'+managedProxyCatalog.map(managedOption).join('');if(managedProxyCatalog.some(p=>p.id===old))e.value=old})}catch(e){toast('Managed proxy repository unavailable','err')}}
+function managedOption(p){return `<option value="${esc(p.id)}">${esc((p.flag||'🌐')+' '+p.country)}</option>`}
+let managedProxyCountries=[],managedProxyTestResults={},proxyRepoState='loading',_proxyRetryT=null;
+function renderRepoStatus(state,status,countries){
+  proxyRepoState=state;
+  const pill=document.getElementById('repo-status-pill'),sr=document.getElementById('sr-repo'),note=document.getElementById('repo-status-note'),hint=document.getElementById('nl-repo-hint');
+  const total=managedProxyCatalog.length,locs=(countries||managedProxyCountries).length;
+  const map={
+    loading:{cls:'warn',icon:'ti-progress',txt:tr('Loading managed proxies…'),sr:tr('Loading…'),note:''},
+    ready:{cls:'ok',icon:'ti-circle-check',txt:toFa(total)+' '+tr('proxies')+' · '+toFa(locs)+' '+tr('locations'),sr:tr('Live'),note:''},
+    stale:{cls:'warn',icon:'ti-history',txt:tr('Last known list'),sr:tr('Sync issue'),note:tr('The repository check failed; the last known proxy list is still in use.')},
+    error:{cls:'err',icon:'ti-cloud-off',txt:tr('Temporarily unavailable'),sr:tr('Unavailable'),note:tr('The managed repository could not be reached. Retrying automatically in the background.')},
+    unconfigured:{cls:'',icon:'ti-lock',txt:tr('Not configured'),sr:tr('Not configured'),note:tr('The managed repository is not configured on this server. You can still use Direct or a custom proxy.')}
+  };
+  const m=map[state]||map.loading;
+  if(pill){pill.className='repo-status-pill '+m.cls;pill.innerHTML='<i class="ti '+m.icon+'"></i><span>'+esc(m.txt)+'</span>'}
+  if(sr){sr.textContent=m.sr;sr.style.color=state==='ready'?'var(--green-t)':(state==='error'?'var(--red-t)':(state==='stale'||state==='loading'?'var(--amber-t)':'var(--t3)'))}
+  if(note){if(m.note){note.className='repo-status-note show '+m.cls;note.innerHTML='<i class="ti ti-info-circle"></i><span>'+esc(m.note)+'</span>'}else{note.className='repo-status-note';note.innerHTML=''}}
+  if(hint){hint.innerHTML='<i class="ti ti-shield-check"></i> '+esc(tr(state==='ready'?'Managed and verified':m.txt))}
+}
+function showProxyTestResult(prefix,proxyId){
+  const status=document.getElementById(prefix+'-proxy-test-status'),detail=document.getElementById(prefix+'-proxy-test-detail');const result=managedProxyTestResults[proxyId];
+  if(!proxyId){if(status)status.textContent='Test required';if(detail)detail.textContent='';return}
+  if(!result){if(status)status.textContent='No recorded test for this exact proxy';if(detail)detail.textContent='';return}
+  const lines=(result.checks||[]).map(c=>{const label=c.target==='https://cloudflare.com'?'Cloudflare':'Google';return label+' — GET — '+(c.ok?(String(c.status||'OK')+' — '+String(c.latency_ms??'—')+' ms'):'FAILED')});
+  if(status){status.textContent=result.overall_status==='healthy'?'Status: Healthy':'Status: Unhealthy';status.style.color=result.overall_status==='healthy'?'var(--md-sys-color-primary)':'var(--md-sys-color-error)'}
+  if(detail)detail.textContent=lines.concat(['Last tested: '+(result.tested_at||'—')]).join('\n');
+}
+function scheduleProxyRetry(state){
+  if(_proxyRetryT){clearTimeout(_proxyRetryT);_proxyRetryT=null}
+  if(state==='loading')_proxyRetryT=setTimeout(()=>loadProxyCatalog(),3000);
+  else if(state==='error'||state==='stale')_proxyRetryT=setTimeout(()=>loadProxyCatalog(),30000);
+}
+async function loadProxyCatalog(){
+  const btn=document.getElementById('proxy-recheck-btn');
+  try{
+    const sr=await authF('/api/proxy-catalog/manual-status');const state=await sr.json();
+    if(btn)btn.style.display=state.enabled?'inline-flex':'none';
+    const r=await authF('/api/proxy-catalog');const d=await r.json();
+    managedProxyCatalog=d.proxies||[];managedProxyCountries=d.countries||[];managedProxyTestResults=d.proxy_test_results||{};
+    if(btn&&(d.status?.manual_refresh_enabled??state.enabled))btn.style.display='inline-flex';
+    const st=d.status?.state||(d.status?.configured===false?'unconfigured':(managedProxyCatalog.length?'ready':'loading'));
+    renderRepoStatus(st,d.status,managedProxyCountries);
+    scheduleProxyRetry(st);
+    ['nl-proxy-id','el-proxy-id'].forEach(id=>{const e=document.getElementById(id);if(!e)return;const old=e.value;e.innerHTML='<option value="">— Choose managed proxy —</option>'+managedProxyCatalog.map(managedOption).join('');if(managedProxyCatalog.some(p=>p.id===old))e.value=old;showProxyTestResult(id.slice(0,2),e.value)});
+    if(typeof mlCatalogUpdated==='function')mlCatalogUpdated();
+  }catch(e){
+    // Keep the last known list; transient failures retry quietly in the background.
+    renderRepoStatus(proxyRepoState==='ready'?'stale':'error');
+    scheduleProxyRetry('error');
+  }
+}
 async function refreshProxyCatalogNow(){const btn=document.getElementById('proxy-recheck-btn');if(btn)btn.disabled=true;try{const r=await authF('/api/proxy-catalog/refresh',{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Refresh failed');toast('Repository checked again','ok');await loadProxyCatalog()}catch(e){toast(e.message||'Refresh failed','err')}finally{if(btn)btn.disabled=false}}
-function syncExitProxy(prefix){const m=document.getElementById(prefix+'-exit-mode')?.value||'direct';document.getElementById(prefix+'-repository-fields').style.display=m==='repository'?'':'none';document.getElementById(prefix+'-custom-fields').style.display=m==='custom'?'':'none';if(m==='custom')toast('Warning: custom proxy is outside the managed safety boundary','err')}
-function exitProxyValues(prefix){return {exit_proxy_mode:document.getElementById(prefix+'-exit-mode')?.value||'direct',proxy_id:document.getElementById(prefix+'-proxy-id')?.value||'',custom_proxy:document.getElementById(prefix+'-custom-proxy')?.value.trim()||''}}
+const proxyTestState={nl:{id:'',receipt:'',existing:false},el:{id:'',receipt:'',existing:false}};
+function proxySelectionChanged(prefix){proxyTestState[prefix]={id:'',receipt:'',existing:false};showProxyTestResult(prefix,document.getElementById(prefix+'-proxy-id')?.value||'')}
+function syncExitProxy(prefix){const m=document.getElementById(prefix+'-exit-mode')?.value||'direct';document.getElementById(prefix+'-repository-fields').style.display=m==='repository'?'':'none';document.getElementById(prefix+'-custom-fields').style.display=m==='custom'?'':'none';if(m!=='repository')proxyTestState[prefix]={id:'',receipt:'',existing:false};if(m==='custom')toast('Warning: custom proxy is outside the managed safety boundary','err')}
+async function testSelectedProxy(prefix){
+  const proxyId=document.getElementById(prefix+'-proxy-id')?.value||'';
+  const status=document.getElementById(prefix+'-proxy-test-status'),button=document.getElementById(prefix+'-proxy-test');
+  if(!proxyId){toast('Choose an exact proxy first','err');return false}
+  proxyTestState[prefix]={id:'',receipt:'',existing:false};if(button)button.disabled=true;if(status){status.textContent='Testing Cloudflare and Google through this proxy…';status.style.color='var(--md-sys-color-primary)'}
+  try{const r=await authF('/api/proxy-catalog/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proxy_id:proxyId})},{retries:0,timeoutMs:25000});const d=await r.json().catch(()=>({}));if(d.test_result&&d.test_result.proxy_id===proxyId)managedProxyTestResults[proxyId]=d.test_result;showProxyTestResult(prefix,proxyId);if(!r.ok||!d.ok||d.proxy_id!==proxyId||!d.receipt)throw new Error(d.detail||'Proxy test failed');proxyTestState[prefix]={id:proxyId,receipt:d.receipt,existing:false};toast('Proxy test passed','ok');return true}catch(e){proxyTestState[prefix]={id:'',receipt:'',existing:false};showProxyTestResult(prefix,proxyId);toast(e.message||'Proxy test failed','err');return false}finally{if(button)button.disabled=false}
+}
+function exitProxyValues(prefix){const proxy_id=document.getElementById(prefix+'-proxy-id')?.value||'';const state=proxyTestState[prefix]||{};return {exit_proxy_mode:document.getElementById(prefix+'-exit-mode')?.value||'direct',proxy_id,custom_proxy:document.getElementById(prefix+'-custom-proxy')?.value.trim()||'',proxy_test_receipt:state.id===proxy_id?state.receipt:''}}
+
 function setQuota(val,unit,el){
   document.getElementById('nl-val').value = val===0?'':val;
   document.getElementById('nl-unit').value = unit;
@@ -2428,9 +2673,9 @@ function selectedCreateEndpoints(){return {address:endpointValue('address'),sni:
 let allSubsList=[],allLinksList=[];
 async function loadLinks(){
   try{
-    const [lr,sr]=await Promise.all([authF('/api/links'),authF('/api/subs')]);
+    const [lr,sr]=await Promise.all([authF('/api/links'),authF('/api/subs').catch(()=>null)]);
     const {links=[]}=await lr.json();
-    const {subs=[]}=await sr.json();
+    const subs=sr&&sr.ok?((await sr.json()).subs||[]):allSubsList;
     allSubsList=subs;allLinksList=links;
     const nlSub=document.getElementById('nl-sub');
     const selectedSub=nlSub.value;
@@ -2465,7 +2710,7 @@ async function loadLinks(){
           <div><span>TLS SNI</span><strong>${esc(routeSni)}</strong></div>
           <div class="route-port"><span>Port</span><strong>${l.port||443}</strong></div>
         </div>
-        <div class="route-proxy ${l.exit_proxy_mode==='repository'?'enabled':(l.exit_proxy_mode==='custom'?'custom':'direct')}"><i class="ti ${l.exit_proxy_mode==='repository'?'ti-shield-check':(l.exit_proxy_mode==='custom'?'ti-alert-triangle':'ti-route')}"></i><span>${l.exit_proxy_mode==='repository'&&l.exit_proxy?`${esc(l.exit_proxy.flag||'🌐')} ${esc(l.exit_proxy.country)} · ${l.exit_proxy.health}% · ${esc(l.exit_proxy.type.toUpperCase())}`:(l.exit_proxy_mode==='custom'?'Custom proxy · unsafe':'Direct')}</span></div>
+        <div class="route-proxy ${l.multi_location?.enabled?'enabled':(l.exit_proxy_mode==='repository'?'enabled':(l.exit_proxy_mode==='custom'?'custom':'direct'))}"><i class="ti ${l.multi_location?.enabled?'ti-world-share':(l.exit_proxy_mode==='repository'?'ti-shield-check':(l.exit_proxy_mode==='custom'?'ti-alert-triangle':'ti-route'))}"></i><span>${l.multi_location?.enabled?`Multi-Location · ${toFa(l.multi_location.active_locations)}/${toFa(l.multi_location.total_locations)} locations`:(l.exit_proxy_mode==='repository'&&l.exit_proxy?`${esc(l.exit_proxy.flag||'🌐')} ${esc(l.exit_proxy.country)}`:(l.exit_proxy_mode==='custom'?'Custom proxy · unsafe':'Direct'))}</span></div>
         <div class="route-data">
           <div class="route-usage">
             <div class="route-data-head"><span>Traffic used</span><b>${fmtB(l.used_bytes)} / ${lim}</b></div>
@@ -2506,9 +2751,10 @@ async function createLink(){
   const speed_limit_value=Number(document.getElementById('nl-speed').value)||0;
   const speed_limit_unit=document.getElementById('nl-speed-unit').value;
   const {address,sni}=selectedCreateEndpoints();
-  const {exit_proxy_mode,proxy_id,custom_proxy}=exitProxyValues('nl');
+  const {exit_proxy_mode,proxy_id,custom_proxy,proxy_test_receipt}=exitProxyValues('nl');
+  if(exit_proxy_mode==='repository'&&(!proxy_id||!proxy_test_receipt)){toast('Test the exact selected proxy before saving','err');return}
   try{
-    const r=await authF('/api/links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,remark,limit_value:val||0,limit_unit:unit,expires_days:exp||0,note,sub_id,protocol,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit,address,sni,exit_proxy_mode,proxy_id,custom_proxy,uuid})});
+    const r=await authF('/api/links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,remark,limit_value:val||0,limit_unit:unit,expires_days:exp||0,note,sub_id,protocol,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit,address,sni,exit_proxy_mode,proxy_id,custom_proxy,proxy_test_receipt,uuid})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.detail||'Could not create config');
     ['nl-label','nl-remark','nl-val','nl-exp','nl-note','nl-uuid','nl-alpn'].forEach(id=>document.getElementById(id).value='');
@@ -2517,7 +2763,7 @@ async function createLink(){
     document.getElementById('nl-speed').value='0';
     document.getElementById('nl-alpn-preset').value='';
     document.getElementById('nl-alpn').style.display='none';
-    document.getElementById('nl-exit-mode').value='direct';document.getElementById('nl-custom-proxy').value='';syncExitProxy('nl');
+    document.getElementById('nl-exit-mode').value='direct';document.getElementById('nl-custom-proxy').value='';proxyTestState.nl={id:'',receipt:'',existing:false};syncExitProxy('nl');
     toast('Config created ✓','ok');loadLinks();
   }catch(e){toast(e.message||'Could not create','err')}
 }
@@ -2536,7 +2782,7 @@ function openEditLink(uuid){
   document.getElementById('el-port').value=l.port||443;
   document.getElementById('el-address').value=l.address||'';
   document.getElementById('el-sni').value=l.sni||'';
-  document.getElementById('el-exit-mode').value=l.exit_proxy_mode||'direct';document.getElementById('el-proxy-id').value=l.proxy_id||'';document.getElementById('el-custom-proxy').value=l.custom_proxy||'';syncExitProxy('el');
+  document.getElementById('el-exit-mode').value=l.exit_proxy_mode||'direct';document.getElementById('el-proxy-id').value=l.proxy_id||'';document.getElementById('el-custom-proxy').value=l.custom_proxy||'';proxyTestState.el={id:l.proxy_id||'',receipt:'',existing:true};const ets=document.getElementById('el-proxy-test-status');if(ets)ets.textContent=l.proxy_id?'Current saved proxy (retest only if changed)':'Test required';syncExitProxy('el');showProxyTestResult('el',l.proxy_id||'');
   document.getElementById('el-iplimit').value=l.ip_limit||0;
   if(!l.speed_limit_bytes){document.getElementById('el-speed').value='0';document.getElementById('el-speed-unit').value='MBIT';}
   else{document.getElementById('el-speed').value=(l.speed_limit_bytes*8/1024/1024).toFixed(2);document.getElementById('el-speed-unit').value='MBIT';}
@@ -2558,8 +2804,9 @@ async function saveEditLink(){
   const speed_limit_unit=document.getElementById('el-speed-unit').value;
   const address=document.getElementById('el-address').value.trim();
   const sni=document.getElementById('el-sni').value.trim();
-  const {exit_proxy_mode,proxy_id,custom_proxy}=exitProxyValues('el');
-  const body={label,remark,note,limit_value:val||0,limit_unit:unit,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit,address,sni,exit_proxy_mode,proxy_id,custom_proxy};
+  const {exit_proxy_mode,proxy_id,custom_proxy,proxy_test_receipt}=exitProxyValues('el');
+  const body={label,remark,note,limit_value:val||0,limit_unit:unit,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit,address,sni,exit_proxy_mode,proxy_id,custom_proxy,proxy_test_receipt};
+  const existing=allLinksList.find(item=>item.uuid===uuid);if(exit_proxy_mode==='repository'&&(!existing||existing.exit_proxy_mode!=='repository'||existing.proxy_id!==proxy_id)&&!proxy_test_receipt){toast('Test the exact selected proxy before saving','err');return}
   if(exp&&Number(exp)>0)body.expires_days=Number(exp);
   try{
     const r=await authF('/api/links/'+uuid,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -2621,8 +2868,10 @@ function renderSubsGrid(subs){
         <button class="sub-card-url-copy" onclick="navigator.clipboard.writeText('${esc(s.public_url)}').then(()=>toast('Public link copied','ok'))" title="Copy"><i class="ti ti-copy"></i></button>
         <button class="sub-card-url-copy" onclick="window.open('${esc(s.public_url)}','_blank')" title="Open"><i class="ti ti-external-link"></i></button>
       </div>
+      ${s.multi_location_summary?.enabled?`<div class="ml-chip" style="margin:0 0 10px"><i class="ti ti-world-share"></i> Multi-Location · ${toFa(s.multi_location_summary.active_locations)}/${toFa(s.multi_location_summary.total_locations)} locations</div>`:''}
       <div class="sub-card-bottom">
         <button class="btn btn-sm btn-g" onclick="openSubLinks('${esc(s.sub_id)}','${esc(s.name)}')"><i class="ti ti-link-plus"></i> Configs</button>
+        <button class="btn btn-sm btn-p" onclick="openMlModal('${esc(s.sub_id)}')"><i class="ti ti-world-share"></i> Locations</button>
         <button class="btn btn-sm btn-o" onclick="navigator.clipboard.writeText('${esc(s.sub_url)}').then(()=>toast('Subscription link copied','ok'))"><i class="ti ti-rss"></i> Sub</button>
         <button class="btn btn-sm btn-g btn-icon" onclick="showQR('${esc(s.sub_url)}')" title="QR"><i class="ti ti-qrcode"></i></button>
         <button class="btn btn-sm btn-d btn-icon" onclick="deleteSub('${esc(s.sub_id)}')" title="Delete"><i class="ti ti-trash"></i></button>
@@ -2708,17 +2957,97 @@ function filterLmodal(q){
 async function saveSubLinks(){
   if(!currentSubId)return;
   const link_ids=[...lmodalInSub];
+  const btn=document.getElementById('modal-save-btn');if(btn)btn.disabled=true;
   try{
     const r=await authF('/api/subs/'+currentSubId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({link_ids})});
-    if(!r.ok)throw new Error();
-    await Promise.all(lmodalLinks.map(l=>
-      authF('/api/links/'+l.uuid,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({sub_id:lmodalInSub.has(l.uuid)?currentSubId:null})})
-    ));
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.detail||'Could not save');
     closeModal('modal-links');
     toast('Group configs saved ✓','ok');
     loadSubs();loadLinks();
-  }catch(e){toast('Could not save','err')}
+  }catch(e){toast(e.message||'Could not save','err')}
+  finally{if(btn)btn.disabled=false}
 }
+/* ===== Multi-Location (subgroup exit locations over one UUID/quota) ===== */
+let mlSubId=null,mlState={enabled:false,remark_text:'',locations:[]};
+function mlSyncSwitch(){
+  const sw=document.getElementById('ml-enabled');
+  sw.classList.toggle('on',mlState.enabled);
+  sw.setAttribute('aria-checked',mlState.enabled?'true':'false');
+  document.getElementById('ml-editor').style.display=mlState.enabled?'':'none';
+}
+function mlToggleEnabled(){
+  mlState.enabled=!mlState.enabled;
+  if(mlState.enabled&&!managedProxyCatalog.length){loadProxyCatalog()}
+  mlSyncSwitch();
+  if(mlState.enabled)renderMlLocations();
+}
+function mlRemarkPreview(){
+  const text=document.getElementById('ml-remark').value.trim();
+  const first=mlState.locations.find(l=>l.active)||mlState.locations[0];
+  const base=first?((first.flag||'🌐')+' '+first.country):'🇩🇪 Germany';
+  document.getElementById('ml-remark-preview').textContent=text?base+' | '+text:base;
+}
+function mlRenderCountryOptions(){
+  const sel=document.getElementById('ml-add-country');if(!sel)return;
+  const used=new Set(mlState.locations.map(l=>l.code));
+  const avail=managedProxyCountries.filter(c=>c.code&&!used.has(c.code));
+  sel.disabled=mlState.locations.length>=2;
+  sel.innerHTML=mlState.locations.length>=2?`<option value="">${tr('Exactly two locations configured')}</option>`:(avail.length?avail.map(c=>`<option value="${esc(c.code)}">${esc(c.flag+' '+c.country)}</option>`).join(''):`<option value="">${tr('No more locations available')}</option>`);
+  mlRenderProxyPick();
+}
+function mlRenderProxyPick(){
+  const code=document.getElementById('ml-add-country').value;const box=document.getElementById('ml-proxy-pick');if(!box)return;
+  if(mlState.locations.length>=2){box.innerHTML='';return}
+  const proxies=managedProxyCatalog.filter(p=>p.country_code===code);
+  box.innerHTML=proxies.length?proxies.map(p=>`<label class="ml-proxy-opt"><input type="radio" name="ml-exact-proxy" value="${esc(p.id)}"><span>${esc(p.flag||'🌐')} ${esc(p.country)}</span></label>`).join(''):`<div class="ml-empty">${tr('No proxies for this location yet')}</div>`;
+}
+async function mlAddLocation(){
+  if(mlState.locations.length>=2){toast(tr('Multi-Location supports exactly two countries'),'err');return}
+  const code=document.getElementById('ml-add-country').value;const meta=managedProxyCountries.find(c=>c.code===code);const selected=document.querySelector('#ml-proxy-pick input:checked');
+  if(!meta||!selected){toast(tr('Choose one country and one exact proxy'),'err');return}
+  const button=document.getElementById('ml-add-btn');if(button)button.disabled=true;
+  try{const r=await authF('/api/proxy-catalog/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proxy_id:selected.value})},{retries:0,timeoutMs:25000});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok||d.proxy_id!==selected.value||!d.receipt)throw new Error(d.detail||'Proxy test failed');mlState.locations.push({id:'',code:meta.code,country:meta.country,flag:meta.flag,proxy_id:selected.value,proxy_test_receipt:d.receipt,active:true});mlRenderCountryOptions();renderMlLocations();mlRemarkPreview();toast('Proxy test passed and location added','ok')}catch(e){toast(e.message||'Proxy test failed','err')}finally{if(button)button.disabled=false}
+}
+function mlRemoveLoc(i){mlState.locations.splice(i,1);mlRenderCountryOptions();renderMlLocations();mlRemarkPreview()}
+function renderMlLocations(){
+  const list=document.getElementById('ml-loc-list');if(!list)return;
+  document.getElementById('ml-loc-count').textContent=toFa(mlState.locations.length);
+  if(!mlState.locations.length){list.innerHTML=`<div class="ml-empty">${tr('Add exactly two countries. Each proxy is tested before acceptance.')}</div>`;return}
+  list.innerHTML=mlState.locations.map((l,i)=>`<div class="ml-loc"><span class="ml-loc-flag">${esc(l.flag||'🌐')}</span><div class="ml-loc-info"><div class="ml-loc-name">${esc(l.country)}</div><div class="ml-loc-meta">Exact selected proxy · no failover</div></div><div class="ml-loc-btns"><button class="ml-icon-btn danger" onclick="mlRemoveLoc(${i})" title="Remove" aria-label="Remove location"><i class="ti ti-trash"></i></button></div></div>`).join('');
+}
+
+function mlCatalogUpdated(){
+  // Fresh repository data arrived while the modal is open: refresh the picker
+  // and live counts without discarding the admin's in-progress edits.
+  if(!document.getElementById('modal-ml').classList.contains('open'))return;
+  mlRenderCountryOptions();renderMlLocations();
+}
+async function openMlModal(sub_id){
+  mlSubId=sub_id;
+  const s=allSubsRaw.find(x=>x.sub_id===sub_id);
+  if(!s){toast(tr('Group not loaded yet'),'err');return}
+  document.getElementById('ml-sub-name').textContent=s.name||'—';
+  const ml=s.multi_location||{enabled:false,remark_text:'',locations:[]};
+  mlState={enabled:!!ml.enabled,remark_text:ml.remark_text||'',locations:(ml.locations||[]).map(l=>({id:l.id||'',code:l.code||'',country:l.country||'',flag:l.flag||'',proxy_id:l.proxy_id||'',proxy_test_receipt:'',active:true}))};
+  document.getElementById('ml-remark').value=mlState.remark_text;
+  mlSyncSwitch();renderMlLocations();mlRenderCountryOptions();mlRemarkPreview();
+  openModal('modal-ml');
+  if(!managedProxyCatalog.length&&proxyRepoState!=='loading')loadProxyCatalog();
+}
+async function saveMl(){
+  if(!mlSubId)return;
+  mlState.remark_text=document.getElementById('ml-remark').value.trim();
+  if(mlState.enabled&&mlState.locations.length!==2){toast(tr('Multi-Location requires exactly two countries'),'err');return}
+  const body={multi_location:{enabled:mlState.enabled,remark_text:mlState.remark_text,locations:mlState.locations.map(l=>({id:l.id||undefined,code:l.code,proxy_id:l.proxy_id,proxy_test_receipt:l.proxy_test_receipt||'',active:true}))}};
+  try{
+    const r=await authF('/api/subs/'+mlSubId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.detail||'Could not save');
+    closeModal('modal-ml');toast(tr('Multi-Location saved ✓'),'ok');loadSubs();
+  }catch(e){toast(e.message||tr('Could not save'),'err')}
+}
+
 async function loadSubsPage(){
   document.getElementById('sub-all-url').textContent=location.protocol+'//'+location.host+'/sub-all';
   try{
@@ -2940,21 +3269,35 @@ function wsLog(c,m){const l=document.getElementById('ws-log'),p=document.createE
 function wsConn(){const u=document.getElementById('ws-uuid').value.trim();if(!u){toast('Enter a UUID','err');return}const url=(location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/'+u;wsLog('info','Connecting: '+url);ws=new WebSocket(url);ws.onopen=()=>wsLog('ok','✓ Connected — UUID valid');ws.onerror=()=>wsLog('err','✗ Failed — UUID invalid or disabled');ws.onmessage=m=>wsLog('info','Received '+(m.data.size||m.data.length)+' byte');ws.onclose=e=>wsLog('err','Closed ('+e.code+')'+(e.code===1008?' — access denied':''))}
 function wsSend(){const m=document.getElementById('ws-msg').value;if(!m||!ws||ws.readyState!==1)return;ws.send(m);wsLog('sent','Sent: '+m);document.getElementById('ws-msg').value=''}
 function wsDisc(){if(ws)ws.close()}
+let dashboardPollerSequence=0;
+function startSerializedPoller(task,intervalMs,label='poller'){
+  const pollerId=label+'-'+(++dashboardPollerSequence);let timer=null,stopped=false;
+  recordDiagnostic('POLLER_CREATED',{path:location.pathname,reason:pollerId});
+  const tick=async()=>{if(stopped)return;if(!document.hidden){try{await task()}catch(_){}}timer=setTimeout(tick,intervalMs)};
+  timer=setTimeout(tick,intervalMs);
+  return ()=>{if(stopped)return;stopped=true;if(timer)clearTimeout(timer);recordDiagnostic('POLLER_STOPPED',{path:location.pathname,reason:pollerId})};
+}
 document.addEventListener('DOMContentLoaded',async()=>{
-  await checkAuth();
+  if(window.__codeDashboardStarted){recordDiagnostic('ROUTER_NAVIGATION',{path:location.pathname,reason:'duplicate dashboard bootstrap prevented'});return}window.__codeDashboardStarted=true;
+  mountDiagnostics();
+  if(!await checkAuth())return;
+  try{const identity=await apiRequest('/api/diagnostics/server',{}, {retries:0,timeoutMs:5000});if(identity.ok){const info=await identity.json();recordDiagnostic('SERVER_IDENTITY',{path:'/api/diagnostics/server',reason:info.server_boot_id||'unknown'})}}catch(_){}
+  flushDiagnostics(false);
   initCharts();
   document.getElementById('set-host').textContent=location.host;
   document.getElementById('sub-all-url')&&(document.getElementById('sub-all-url').textContent=location.protocol+'//'+location.host+'/sub-all');
-  fetchStats();fetchDefaultVless();loadEndpointChoices();loadProxyCatalog();loadLinks();loadSubs();loadUpdateStatus(true);
-  setInterval(fetchStats,4000);
-  setInterval(()=>loadUpdateStatus(false),15*60*1000);
-  setInterval(()=>{
-    if(document.getElementById('pg-links').classList.contains('on'))loadLinks();
-    if(document.getElementById('pg-subgroups').classList.contains('on'))loadSubs();
-    if(document.getElementById('pg-subscriptions').classList.contains('on'))loadSubsPage();
-    if(document.getElementById('pg-connections').classList.contains('on'))loadConns();
-    if(document.getElementById('pg-logs').classList.contains('on'))loadActivity();
-  },5000);
+  fetchStats();fetchDefaultVless();loadEndpointChoices();loadProxyCatalog();loadLinks();loadSubs();loadUpdateStatus();
+  window.__codeDashboardPollers?.forEach(stop=>stop());window.__codeDashboardPollers=[];
+  window.__codeDashboardPollers.push(startSerializedPoller(fetchStats,4000,'stats'));
+  window.__codeDashboardPollers.push(startSerializedPoller(loadUpdateStatus,15*60*1000,'updater'));
+  window.__codeDashboardPollers.push(startSerializedPoller(async()=>{
+    if(document.getElementById('pg-links').classList.contains('on'))await loadLinks();
+    if(document.getElementById('pg-subgroups').classList.contains('on'))await loadSubs();
+    if(document.getElementById('pg-subscriptions').classList.contains('on'))await loadSubsPage();
+    if(document.getElementById('pg-connections').classList.contains('on'))await loadConns();
+    if(document.getElementById('pg-logs').classList.contains('on'))await loadActivity();
+  },5000,'view-refresh'));
+  window.addEventListener('pagehide',()=>window.__codeDashboardPollers?.forEach(stop=>stop()),{once:true});
 });
 </script>
 </body></html>"""
@@ -3266,9 +3609,7 @@ function toast(msg,type=''){
 function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function fmtB(b){if(!b||b===0)return '0 B';if(b<1024)return b+' B';if(b<1024**2)return (b/1024).toFixed(1)+' KB';if(b<1024**3)return (b/1024**2).toFixed(2)+' MB';return (b/1024**3).toFixed(2)+' GB'}
 function nowTime(){return new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
-function protoChip(p){
-  return '<span class="chip chip-proto">VLESS · WS Turbo</span>';
-}
+function protoChip(_p){return ''}
 function copyText(text,msg){
   navigator.clipboard.writeText(text).then(()=>toast(msg,'ok')).catch(()=>toast('Copy failed','err'));
 }
@@ -3329,7 +3670,7 @@ function togglePwVis(){
 async function submitLock(){
   const pw=document.getElementById('lock-pw').value;
   const btn=document.getElementById('lock-submit');
-  btn.disabled=true;btn.innerHTML=SPINNER+' Checking…';
+  btn.disabled=true;btn.innerHTML=SPINNER+' Checking���';
   try{
     const data=await loadData(pw);
     if(data.locked){renderLock(data.name,'Incorrect password');return}
@@ -3362,8 +3703,10 @@ function renderContent(d){
       <article class="cfg${l.active ? '' : ' off'}">
         <div class="cfg-head">
           <div>
-            <div class="cfg-name">${esc(l.label)}</div>
+            <div class="cfg-name">${l.location ? esc(l.remark) : esc(l.label)}</div>
             <div class="chips">
+              ${l.location ? `<span class="chip">${esc(l.location.flag)} ${esc(l.location.country)}</span>` : ''}
+              ${l.location ? `<span class="chip">${esc(l.label)}</span>` : ''}
               ${protoChip(l.protocol)}
               ${l.connections > 0 ? `<span class="chip chip-live"><span class="dot"></span> ${l.connections} connected</span>` : ''}
             </div>
@@ -3371,7 +3714,7 @@ function renderContent(d){
           <span class="pill ${l.active ? 'pill-ok' : 'pill-off'}">${l.active ? '<i class="ti ti-circle-check"></i> Active' : '<i class="ti ti-circle-x"></i> Inactive'}</span>
         </div>
         <div class="meter"><div class="meter-fill" style="width:${pct}%;background:${col}"></div></div>
-        <div class="meter-txt"><span>${esc(l.used_fmt)} used</span><span>${lim === 'Unlimited' ? 'Unlimited data' : 'of ' + lim}</span></div>
+        <div class="meter-txt"><span>${esc(l.used_fmt)} used</span><span>${lim === 'Unlimited' ? 'Unlimited data' : 'of ' + lim}${l.shared_quota ? ' · shared quota' : ''}</span></div>
         <button class="disclose" id="vt-${i}" onclick="toggleLink(${i})">
           <span class="dl"><i class="ti ti-key"></i> <span>Show configuration link</span></span>
           <i class="ti ti-chevron-down"></i>
@@ -3443,7 +3786,8 @@ function renderContent(d){
     </div>
     <div class="cfg-list">${cards}</div>
   `;
-  setTimeout(() => autoRefresh(), 30000);
+  if (window._refreshT) clearTimeout(window._refreshT);
+  window._refreshT = setTimeout(() => autoRefresh(), 30000);
 }
 
 function copyAllConfigs(){

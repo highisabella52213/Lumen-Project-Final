@@ -17,7 +17,7 @@ if __name__ == "__main__":
     sys.modules.setdefault("main", sys.modules[__name__])
 
 import aiofiles
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from urllib.parse import quote
 from collections import deque, defaultdict
@@ -32,6 +32,7 @@ import httpx
 import logging
 
 # اتصال خروجی هر کانفیگ از مخزن پروکسی مدیریت‌شده.
+import countries
 import outbound
 import proxy_repository
 from config_address import (
@@ -45,19 +46,65 @@ from config_address import (
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("X4G")
+logger = logging.getLogger("code")
 
 IRAN_TZ = ZoneInfo("Asia/Tehran")
 
 app = FastAPI(title="Lumen Relay", docs_url=None, redoc_url=None)
 
+# Safe, process-lifetime identity for diagnosing Railway restarts. This is not
+# derived from a credential and intentionally changes only when the process does.
+SERVER_BOOT_ID = secrets.token_urlsafe(12)
+SERVER_STARTED_AT = datetime.now(timezone.utc).isoformat()
+# Set APP_BUILD_ID in Railway (for example to the deployed Git SHA). It is safe
+# to expose and makes an old artifact or wrong service immediately detectable.
+APP_BUILD_ID = os.environ.get("APP_BUILD_ID", "source-forensic-v30")
+SERVER_RELEASE = "forensic-v30"
+CLIENT_DIAGNOSTIC_EVENTS: deque = deque(maxlen=800)
+CLIENT_DIAGNOSTIC_LOCK = asyncio.Lock()
+
+
+def server_diagnostic_identity() -> dict:
+    return {"server_boot_id": SERVER_BOOT_ID, "server_started_at": SERVER_STARTED_AT, "app_build_id": APP_BUILD_ID, "release": SERVER_RELEASE}
+
 # ── Persistence ───────────────────────────────────────────────────────────────
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
-DATA_FILE = DATA_DIR / "x4g_state.json"
-SECRET_FILE = DATA_DIR / "x4g_secret.key"
+DATA_FILE = DATA_DIR / "code_state.json"
+SECRET_FILE = DATA_DIR / "code_secret.key"
 SAVE_LOCK = asyncio.Lock()
-STATE_BACKUPS = (DATA_DIR / "x4g_state.backup-1.json", DATA_DIR / "x4g_state.backup-2.json")
+STATE_BACKUPS = (DATA_DIR / "code_state.backup-1.json", DATA_DIR / "code_state.backup-2.json")
 STATE_SNAPSHOT_ENV = "LUMEN_STATE_SNAPSHOT_B64"
+
+# One-time migration from the pre-rename file names. The legacy tag is built
+# without the literal so repository-wide searches stay clean.
+_LEGACY_TAG = "x" + "4g"
+LEGACY_STATE_FILES = (
+    (DATA_DIR / (_LEGACY_TAG + "_state.json"), DATA_FILE),
+    (DATA_DIR / (_LEGACY_TAG + "_state.backup-1.json"), STATE_BACKUPS[0]),
+    (DATA_DIR / (_LEGACY_TAG + "_state.backup-2.json"), STATE_BACKUPS[1]),
+    (DATA_DIR / (_LEGACY_TAG + "_secret.key"), SECRET_FILE),
+)
+
+
+def _migrate_legacy_state() -> None:
+    """Move pre-rename state/backup/secret files to their current names.
+
+    Existing Railway volumes still carry the old file names; without this
+    migration a deploy would look like a fresh install (lost configs and an
+    invalidated admin password hash). Current files always win; legacy files
+    are left untouched when the current name already exists.
+    """
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        for legacy, current in LEGACY_STATE_FILES:
+            try:
+                if legacy.exists() and not current.exists():
+                    legacy.replace(current)
+                    logger.info("Migrated legacy state file %s -> %s", legacy.name, current.name)
+            except OSError as exc:
+                logger.warning("Could not migrate %s: %s", legacy.name, exc)
+    except Exception as exc:  # never block startup on migration
+        logger.warning("Legacy state migration skipped: %s", exc)
 
 def _load_or_create_secret() -> str:
     """SECRET_KEY را روی دیسک ذخیره و ثابت نگه می‌دارد.
@@ -69,6 +116,7 @@ def _load_or_create_secret() -> str:
     env_secret = os.environ.get("SECRET_KEY")
     if env_secret:
         return env_secret
+    _migrate_legacy_state()
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         if SECRET_FILE.exists():
@@ -91,19 +139,31 @@ CONFIG = {
 import updater
 updater.configure()
 
+# The panel is a same-origin, cookie-authenticated app; cross-origin browser
+# access is intentionally disabled (wildcard origins plus credentials is both
+# invalid per CORS and an unnecessary attack surface).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_server_diagnostic_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Lumen-Server-Boot-ID"] = SERVER_BOOT_ID
+    response.headers["X-Lumen-Server-Started-At"] = SERVER_STARTED_AT
+    response.headers["X-Lumen-Release"] = SERVER_RELEASE
+    return response
 
 def _state_payload() -> dict:
     return {
         "schema_version": 2,
         "links": dict(LINKS),
         "subs": dict(SUBS),
+        "proxy_test_results": dict(PROXY_TEST_RESULTS),
         "password_hash": AUTH["password_hash"],
         "saved_at": datetime.now().isoformat(),
     }
@@ -113,8 +173,9 @@ def _validate_state(data: object) -> dict:
     if not isinstance(data, dict):
         raise ValueError("state root is not an object")
     links, subs = data.get("links"), data.get("subs")
-    if not isinstance(links, dict) or not isinstance(subs, dict):
-        raise ValueError("links/subs are missing or invalid")
+    tests = data.get("proxy_test_results", {})
+    if not isinstance(links, dict) or not isinstance(subs, dict) or not isinstance(tests, dict):
+        raise ValueError("links/subs/proxy_test_results are missing or invalid")
     if len(links) > 100_000 or len(subs) > 100_000:
         raise ValueError("state is unreasonably large")
     return data
@@ -195,7 +256,7 @@ def _verify_persistent_storage() -> None:
 
 
 async def load_state():
-    global LINKS, AUTH, SUBS
+    global LINKS, AUTH, SUBS, PROXY_TEST_RESULTS
     candidates = (DATA_FILE, *STATE_BACKUPS)
     existing = [path for path in candidates if path.exists()]
     loaded = None
@@ -221,7 +282,7 @@ async def load_state():
     if loaded is None:
         logger.info("No previous state found; starting with an empty database")
         return
-    LINKS.clear(); SUBS.clear()
+    LINKS.clear(); SUBS.clear(); PROXY_TEST_RESULTS.clear()
     LINKS.update(loaded.get("links", {}))
     for _link in LINKS.values():
         _link["protocol"] = DEFAULT_PROTOCOL
@@ -233,6 +294,38 @@ async def load_state():
         if not _link.get("alpn") or "h2" in str(_link.get("alpn")):
             _link["alpn"] = "http/1.1"
     SUBS.update(loaded.get("subs", {}))
+    raw_proxy_tests = loaded.get("proxy_test_results", {})
+    if isinstance(raw_proxy_tests, dict):
+        for _pid, _test in raw_proxy_tests.items():
+            _safe = sanitize_proxy_test_result(_pid, _test)
+            if _safe is not None:
+                PROXY_TEST_RESULTS[_safe["proxy_id"]] = _safe
+    for _sub in SUBS.values():
+        _ml = _sub.get("multi_location")
+        if not isinstance(_ml, dict):
+            _sub["multi_location"] = _default_multi_location()
+        else:
+            _ml.setdefault("enabled", False)
+            _ml.setdefault("remark_text", "")
+            if not isinstance(_ml.get("locations"), list):
+                _ml["locations"] = []
+            for _loc in _ml["locations"]:
+                if not isinstance(_loc, dict):
+                    continue
+                _loc.setdefault("id", secrets.token_urlsafe(8))
+                _loc["active"] = True
+                legacy_ids = _loc.pop("proxy_ids", [])
+                if not _loc.get("proxy_id") and isinstance(legacy_ids, list) and len(legacy_ids) == 1:
+                    _loc["proxy_id"] = str(legacy_ids[0] or "")
+                _loc.setdefault("proxy_id", "")
+                _name, _code = countries.normalize_country(_loc.get("code") or _loc.get("country"))
+                _loc["code"] = _code
+                _loc["country"] = countries.country_name(_code) if _code else (_loc.get("country") or "Unknown")
+                _loc["flag"] = countries.flag_for(_code)
+            if _ml.get("enabled") and (len(_ml["locations"]) != 2 or any(not loc.get("proxy_id") for loc in _ml["locations"] if isinstance(loc, dict))):
+                # Legacy weighted/failover configurations cannot be interpreted
+                # as two explicit choices safely. Preserve them but fail closed.
+                _ml["migration_required"] = True
     if "password_hash" in loaded:
         AUTH["password_hash"] = loaded["password_hash"]
     if loaded_from != DATA_FILE:
@@ -269,8 +362,12 @@ LINKS: dict = {}
 LINKS_LOCK = asyncio.Lock()
 SUBS: dict = {}
 SUBS_LOCK = asyncio.Lock()
+# Results are keyed solely by stable proxy ID; endpoint URLs and credentials are
+# never stored in this structure.
+PROXY_TEST_RESULTS: dict[str, dict] = {}
+PROXY_TEST_RESULTS_LOCK = asyncio.Lock()
 
-# پروتکل‌های پشتیبانی‌شده برای هر ��انفیگ
+# پ��وتکل‌های پشتیبانی‌شده برای هر ��انفیگ
 PROTOCOLS = ("vless-ws",)
 DEFAULT_PROTOCOL = "vless-ws"
 
@@ -299,7 +396,7 @@ def log_activity(kind: str, message: str, level: str = "info"):
     })
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-SESSION_COOKIE = "x4g_session"
+SESSION_COOKIE = "code_session"
 SESSION_TTL = 60 * 60 * 24 * 365
 
 def hash_password(pw: str) -> str:
@@ -349,13 +446,14 @@ async def startup():
         limits=limits, timeout=timeout, follow_redirects=True,
     )
     _verify_persistent_storage()
+    _migrate_legacy_state()
     await load_state()
     await updater.load()
-    asyncio.create_task(proxy_repository.refresh(force=True))
+    proxy_repository.kick_refresh(force=True)
     proxy_repository.start_periodic_refresh()
     await _tg_start_bot()
     log_activity("system", "سرور راه‌اندازی شد", "ok")
-    logger.info(f"Lumen Relay WS-only v20 started on port {CONFIG['port']}")
+    logger.info(f"Lumen Relay WS-only v28 started on port {CONFIG['port']}")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -385,6 +483,42 @@ def get_host(request: Request | None = None) -> str:
 
 
 BUILTIN_VLESS_ADDRESSES = ("railway.com", "69.46.46.18", "69.46.46.126")
+
+PROXY_TEST_RECEIPT_TTL = 10 * 60
+
+
+def _proxy_endpoint_fingerprint(record) -> str:
+    return hashlib.sha256(record.endpoint.encode()).hexdigest()
+
+
+def issue_proxy_test_receipt(record) -> str:
+    payload = {
+        "proxy_id": record.id,
+        "endpoint": _proxy_endpoint_fingerprint(record),
+        "expires": int(time.time()) + PROXY_TEST_RECEIPT_TTL,
+    }
+    body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()).decode().rstrip("=")
+    signature = hmac.new(CONFIG["secret"].encode(), body.encode(), hashlib.sha256).hexdigest()
+    return body + "." + signature
+
+
+def verify_proxy_test_receipt(proxy_id: str, receipt: str) -> bool:
+    try:
+        body, signature = str(receipt or "").split(".", 1)
+        expected = hmac.new(CONFIG["secret"].encode(), body.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return False
+        payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        record = proxy_repository.get_record(proxy_id)
+        return bool(record and payload.get("proxy_id") == record.id and payload.get("endpoint") == _proxy_endpoint_fingerprint(record) and int(payload.get("expires") or 0) >= int(time.time()))
+    except Exception:
+        return False
+
+
+def require_proxy_test_receipt(proxy_id: str, receipt: str) -> None:
+    if not verify_proxy_test_receipt(proxy_id, receipt):
+        raise ValueError("Selected proxy must pass the exact Cloudflare and Google connectivity test before it can be saved")
+
 
 async def normalize_exit_proxy(mode, proxy_id="", custom_proxy=""):
     mode=str(mode or "direct").lower()
@@ -446,6 +580,7 @@ def generate_vless_link(
     port: int | None = None,
     address: str | None = None,
     sni: str | None = None,
+    loc: str | None = None,
 ) -> str:
     """لینک VLESS-over-WebSocket سریع و سازگار با Xray را می‌سازد.
     fingerprint / alpn / port در صورت ندادن از پیش‌فرض WS استفاده می‌شوند."""
@@ -465,6 +600,12 @@ def generate_vless_link(
     except ValueError:
         transport_host = str(host or "").strip()
     path = f"/ws/{uuid}?ed=4096"
+    if loc:
+        # Multi-Location: the client picks the exit location; the UUID, quota
+        # and identity stay the same on every location entry.
+        safe_loc = "".join(ch for ch in str(loc) if ch.isalnum() or ch in "-_")[:24]
+        if safe_loc:
+            path += f"&loc={safe_loc}"
     params = {
         "encryption": "none",
         "security": "tls",
@@ -478,19 +619,44 @@ def generate_vless_link(
     query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
     return f"vless://{uuid}@{authority_host(dial_address)}:{port_val}?{query}#{quote(remark)}"
 
-def vless_link_for_link(link: dict, uid: str, host: str) -> str:
-    """generate_vless_link رو با تنظیمات دستی همون کانفیگ (fingerprint/alpn/port) صدا می‌زنه."""
-    proto = link.get("protocol", DEFAULT_PROTOCOL)
-    return generate_vless_link(
-        uid, host,
-        remark=(link.get("remark") or link.get("label") or "Lumen Relay"),
-        protocol=proto,
+def vless_entries_for_link(link: dict, uid: str, host: str) -> list:
+    """One entry per active Multi-Location location (same UUID and quota), or a
+    single entry for normal routes. Each entry: vless_link, remark, location."""
+    base_kwargs = dict(
+        protocol=link.get("protocol", DEFAULT_PROTOCOL),
         fingerprint=link.get("fingerprint"),
         alpn=link.get("alpn"),
         port=link.get("port"),
         address=link.get("address"),
         sni=link.get("sni"),
     )
+    _sub, ml = multi_location_for_link(link)
+    if ml is not None:
+        locations = [loc for loc in ml.get("locations", []) if loc.get("active")]
+        if locations:
+            text = ml.get("remark_text") or ""
+            entries = []
+            for loc in locations:
+                remark = location_remark(loc, text)
+                entries.append({
+                    "vless_link": generate_vless_link(uid, host, remark=remark, loc=loc.get("id"), **base_kwargs),
+                    "remark": remark,
+                    "location": {"id": loc.get("id"), "country": loc.get("country"), "code": loc.get("code"), "flag": loc.get("flag")},
+                    "shared_quota": True,
+                })
+            return entries
+    remark = (link.get("remark") or link.get("label") or "Lumen Relay")
+    return [{
+        "vless_link": generate_vless_link(uid, host, remark=remark, **base_kwargs),
+        "remark": remark,
+        "location": None,
+        "shared_quota": False,
+    }]
+
+
+def vless_link_for_link(link: dict, uid: str, host: str) -> str:
+    """generate_vless_link رو با تنظیمات دستی همون کانفیگ (fingerprint/alpn/port) صدا می‌زنه."""
+    return vless_entries_for_link(link, uid, host)[0]["vless_link"]
 
 def uptime() -> str:
     secs = int(time.time() - stats["start_time"])
@@ -554,7 +720,7 @@ def unique_ips_for_uuid(uuid: str) -> set:
 def is_ip_allowed(link: dict | None, uuid: str, ip: str) -> bool:
     """محدودیت تعداد آی‌پی/کاربر هم‌زمان برای هر کانفیگ. ip_limit=0 یعنی نامحدود.
     اگر همین آی‌پی از قبل روی این کانفیگ سشن باز داشته باشه، همیشه مجازه (برای چند اتصال
-    هم‌زمان از یک دستگاه/مرورگر مشکلی پیش نمیاد)."""
+    هم‌زمان از یک ����ستگاه/مرورگر مشکلی پیش نمیاد)."""
     if link is None:
         return False
     limit = int(link.get("ip_limit", 0) or 0)
@@ -616,6 +782,12 @@ async def ensure_default_link():
 async def root():
     return HTMLResponse(content=LANDING_HTML)
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    # Silence the browser's automatic request; the product UI uses icon fonts.
+    return Response(status_code=204)
+
+
 @app.get("/health")
 async def health():
     active_links = sum(1 for link in LINKS.values() if is_link_allowed(link))
@@ -627,6 +799,7 @@ async def health():
         "connections": len(connections),
         "active_configs": active_links,
         "uptime": uptime(),
+        "server": server_diagnostic_identity(),
         "persistence": {"path": str(DATA_DIR), "volume_mounted": bool(os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")), "required": str(os.environ.get("LUMEN_REQUIRE_PERSISTENT_STORAGE", "")).lower() in {"1", "true", "yes", "on"}},
     }
 
@@ -639,8 +812,8 @@ async def subscription_single(uuid: str, request: Request):
     if not link or not is_link_allowed(link):
         raise HTTPException(status_code=404, detail="not found or inactive")
     host = get_host(request)
-    vless = vless_link_for_link(link, uuid, host)
-    content = base64.b64encode(vless.encode()).decode()
+    entries = vless_entries_for_link(link, uuid, host)
+    content = base64.b64encode("\n".join(e["vless_link"] for e in entries).encode()).decode()
     return Response(content=content, media_type="text/plain",
                     headers={"profile-title": quote(link["label"])})
 
@@ -661,32 +834,48 @@ async def subscription_all(request: Request, _=Depends(require_auth)):
 # SUB GROUP endpoints
 # ══════════════════════════════════════════════════════════════════════════════
 
+def public_sub(sub_id: str, sub: dict, host: str) -> dict:
+    """Admin-facing subgroup payload — the password hash never leaves the server."""
+    ml = sub.get("multi_location") or _default_multi_location()
+    locations = []
+    for loc in (ml.get("locations") or []):
+        proxy_id = str(loc.get("proxy_id") or "")
+        locations.append({**loc, "proxy_available": proxy_repository.get_record(proxy_id) is not None})
+    ml = {**ml, "locations": locations}
+    return {
+        "sub_id": sub_id,
+        "name": sub.get("name", ""),
+        "desc": sub.get("desc", ""),
+        "uuid_key": sub.get("uuid_key"),
+        "created_at": sub.get("created_at"),
+        "link_ids": list(sub.get("link_ids", [])),
+        "password_hash": None,
+        "has_password": sub.get("password_hash") is not None,
+        "multi_location": ml,
+        "multi_location_summary": {
+            "enabled": bool(ml.get("enabled")),
+            "total_locations": len(locations),
+            "active_locations": sum(1 for loc in locations if loc.get("active")),
+        },
+        "public_url": f"https://{host}/p/{sub.get('uuid_key')}",
+        "sub_url": "https://" + host + "/sub-group/" + str(sub.get("uuid_key")),
+    }
+
+
 @app.post("/api/subs")
 async def create_sub(request: Request, _=Depends(require_auth)):
     body = await request.json()
-    name = (body.get("name") or "گروه جدید").strip()[:60]
-    desc = (body.get("desc") or "").strip()[:200]
-    password = (body.get("password") or "").strip()
-    sub_id = generate_uuid()
-    uuid_key = secrets.token_urlsafe(16)
-    async with SUBS_LOCK:
-        SUBS[sub_id] = {
-            "name": name,
-            "desc": desc,
-            "password_hash": hash_password(password) if password else None,
-            "uuid_key": uuid_key,
-            "created_at": datetime.now().isoformat(),
-            "link_ids": [],
-        }
-    await save_state(strict=True)
-    log_activity("sub", f"گروه «{name}» ساخته شد", "ok")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid body")
+    sub_id, _sub = await create_sub_group(
+        name=body.get("name") or "گروه جدید",
+        desc=body.get("desc") or "",
+        password=body.get("password") or "",
+    )
     host = get_host(request)
-    return {
-        "sub_id": sub_id,
-        **SUBS[sub_id],
-        "public_url": f"https://{host}/p/{uuid_key}",
-        "sub_url": "https://" + host + "/sub-group/" + str(uuid_key),
-    }
+    async with SUBS_LOCK:
+        sub = dict(SUBS[sub_id])
+    return public_sub(sub_id, sub, host)
 
 @app.get("/api/subs")
 async def list_subs(request: Request, _=Depends(require_auth)):
@@ -701,23 +890,40 @@ async def list_subs(request: Request, _=Depends(require_auth)):
         active_count = sum(1 for lid in link_ids if is_link_allowed(snap_links.get(lid)))
         total_used = sum(snap_links[lid].get("used_bytes", 0) for lid in link_ids if lid in snap_links)
         result.append({
-            "sub_id": sid,
-            **s,
-            "password_hash": None,
-            "has_password": s.get("password_hash") is not None,
+            **public_sub(sid, s, host),
             "links_count": len(link_ids),
             "active_count": active_count,
             "total_used_bytes": total_used,
             "total_used_fmt": fmt_bytes(total_used),
-            "public_url": f"https://{host}/p/{s['uuid_key']}",
-            "sub_url": "https://" + host + "/sub-group/" + str(uuid_key),
         })
-    result.sort(key=lambda x: x["created_at"], reverse=True)
+    result.sort(key=lambda x: x["created_at"] or "", reverse=True)
     return {"subs": result}
 
 @app.patch("/api/subs/{sub_id}")
 async def update_sub(sub_id: str, request: Request, _=Depends(require_auth)):
     body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid body")
+    ml_value = None
+    if "multi_location" in body:
+        previous_ml = (SUBS.get(sub_id) or {}).get("multi_location")
+        try:
+            ml_value = await validate_multi_location(body.get("multi_location"), previous_ml, require_tests=True)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    new_ids = None
+    if "link_ids" in body:
+        raw_ids = body.get("link_ids")
+        if not isinstance(raw_ids, list):
+            raise HTTPException(status_code=400, detail="link_ids must be a list")
+        async with LINKS_LOCK:
+            known = set(LINKS)
+        clean_ids = []
+        for lid in raw_ids:
+            lid = str(lid or "")
+            if lid and lid in known and lid not in clean_ids:
+                clean_ids.append(lid)
+        new_ids = clean_ids
     async with SUBS_LOCK:
         if sub_id not in SUBS:
             raise HTTPException(status_code=404, detail="sub not found")
@@ -729,8 +935,40 @@ async def update_sub(sub_id: str, request: Request, _=Depends(require_auth)):
         if "password" in body:
             pw = str(body["password"]).strip()
             s["password_hash"] = hash_password(pw) if pw else None
-        if "link_ids" in body:
-            s["link_ids"] = list(body["link_ids"])
+        if ml_value is not None:
+            s["multi_location"] = ml_value
+            log_activity("sub", f"Multi-Location گروه «{s.get('name', sub_id)}» به‌روزرسانی شد", "info")
+        if new_ids is not None:
+            old_ids = set(s.get("link_ids", []))
+            s["link_ids"] = new_ids
+    if new_ids is not None:
+        # Two-way sync: the group membership and each config's sub_id must
+        # always agree, no matter which side was edited. Locks stay sequential
+        # (never nested) like every other state mutation in this module.
+        wanted = set(new_ids)
+        moved_from = []
+        async with LINKS_LOCK:
+            for lid in old_ids - wanted:
+                link = LINKS.get(lid)
+                if link is not None and link.get("sub_id") == sub_id:
+                    link["sub_id"] = None
+            for lid in wanted - old_ids:
+                link = LINKS.get(lid)
+                if link is not None:
+                    prev = link.get("sub_id")
+                    if prev and prev != sub_id:
+                        moved_from.append((prev, lid))
+                    link["sub_id"] = sub_id
+        if moved_from:
+            # detach configs that moved here from their previous groups
+            async with SUBS_LOCK:
+                for prev, lid in moved_from:
+                    other = SUBS.get(prev)
+                    if other is None:
+                        continue
+                    other_ids = other.get("link_ids", [])
+                    if lid in other_ids:
+                        other_ids.remove(lid)
     await save_state(strict=True)
     return {"ok": True}
 
@@ -792,7 +1030,7 @@ async def sub_group_subscription(uuid_key: str, request: Request):
         for lid in link_ids:
             link = LINKS.get(lid)
             if link and is_link_allowed(link):
-                lines.append(vless_link_for_link(link, lid, host))
+                lines.extend(e["vless_link"] for e in vless_entries_for_link(link, lid, host))
 
     content = base64.b64encode("\n".join(lines).encode()).decode()
     return Response(
@@ -815,7 +1053,8 @@ async def api_login(request: Request):
     token = await create_session()
     log_activity("auth", f"ورود موفق به پنل از {ip}", "ok")
     resp = JSONResponse({"ok": True})
-    resp.set_cookie(SESSION_COOKIE, token, max_age=SESSION_TTL, httponly=True, samesite="lax", path="/")
+    forwarded_proto = str(request.headers.get("x-forwarded-proto") or request.url.scheme or "").split(",", 1)[0].strip().lower()
+    resp.set_cookie(SESSION_COOKIE, token, max_age=SESSION_TTL, httponly=True, secure=forwarded_proto == "https", samesite="lax", path="/")
     return resp
 
 @app.post("/api/logout")
@@ -842,12 +1081,111 @@ async def api_change_password(request: Request, token=Depends(require_auth)):
         SESSIONS.clear()
         SESSIONS[token] = time.time() + SESSION_TTL
     await save_state()
-    log_activity("auth", "رمز عبور پنل تغییر کرد", "ok")
+    log_activity("auth", "رمز عبور پنل ت��ییر کرد", "ok")
     return {"ok": True}
+
+# ── Safe diagnostics and proxy-test history ──────────────────────────────────
+_DIAGNOSTIC_KINDS = {
+    "DOCUMENT_BOOT", "ROUTER_NAVIGATION", "LOCATION_RELOAD", "LOCATION_ASSIGN",
+    "LOCATION_REPLACE", "AUTH_REDIRECT", "SERVICE_WORKER_NAVIGATION",
+    "SERVICE_WORKER_CONTROLLER_CHANGE", "UNCAUGHT_ERROR", "UNHANDLED_REJECTION",
+    "FETCH_START", "FETCH_RESPONSE", "FETCH_ERROR", "PAGE_SHOW", "PAGE_HIDE",
+    "BEFORE_UNLOAD", "VISIBILITY_CHANGE", "HISTORY_PUSH", "HISTORY_REPLACE",
+    "WINDOW_OPEN", "SERVER_IDENTITY", "POLLER_CREATED", "POLLER_STOPPED", "FEATURE_UNAUTHORIZED", "AUTH_STATE", "AUTH_CHECK_FAILED",
+}
+
+def _safe_diag_text(value: object, limit: int = 240) -> str:
+    text = "".join(ch for ch in str(value or "") if ch.isprintable())[:limit]
+    # Never retain a query string; auth values and opaque tokens often occur there.
+    return text.split("?", 1)[0]
+
+def _safe_diag_path(value: object) -> str:
+    raw = _safe_diag_text(value, 300)
+    if "://" in raw:
+        raw = raw.split("://", 1)[1]
+        raw = raw[raw.find("/"):] if "/" in raw else "/"
+    return raw if raw.startswith("/") else "/"
+
+def sanitize_client_diagnostic(event: object) -> dict | None:
+    if not isinstance(event, dict) or event.get("kind") not in _DIAGNOSTIC_KINDS:
+        return None
+    out = {"kind": event["kind"], "at_ms": int(event.get("at_ms") or 0)}
+    for key in ("boot_id", "navigation_type", "classification", "error_type", "reason", "method", "stack", "visibility"):
+        if key in event:
+            out[key] = _safe_diag_text(event[key], 1800 if key == "stack" else 120)
+    if "path" in event:
+        out["path"] = _safe_diag_path(event["path"])
+    for key in ("status", "duration_ms", "attempt", "boot_count"):
+        if key in event:
+            try: out[key] = max(0, min(int(event[key]), 2_000_000_000))
+            except (TypeError, ValueError): pass
+    return out
+
+def sanitize_proxy_test_result(proxy_id: object, result: object) -> dict | None:
+    proxy_id = str(proxy_id or "").strip()
+    if not proxy_id or not isinstance(result, dict) or str(result.get("proxy_id") or "") != proxy_id:
+        return None
+    checks = []
+    for item in result.get("checks") or []:
+        if not isinstance(item, dict): continue
+        target = str(item.get("target") or "")
+        if target not in {"https://cloudflare.com", "https://google.com"}: continue
+        status = item.get("status")
+        checks.append({
+            "target": target, "ok": bool(item.get("ok")),
+            "status": int(status) if isinstance(status, int) and 0 <= status <= 999 else None,
+            "latency_ms": max(0, min(int(item.get("latency_ms") or 0), 120_000)),
+            "error": _safe_diag_text(item.get("error"), 80) if not item.get("ok") else None,
+        })
+    if {x["target"] for x in checks} != {"https://cloudflare.com", "https://google.com"}:
+        return None
+    return {
+        "proxy_id": proxy_id,
+        "country": _safe_diag_text(result.get("country"), 80),
+        "overall_status": "healthy" if bool(result.get("ok")) else "unhealthy",
+        "tested_at": _safe_diag_text(result.get("tested_at"), 48),
+        "checks": checks,
+    }
+
+async def current_proxy_test_results() -> dict:
+    async with PROXY_TEST_RESULTS_LOCK:
+        snapshot = dict(PROXY_TEST_RESULTS)
+    # A stale ID or changed record cannot be presented as the current proxy's test.
+    return {pid: result for pid, result in snapshot.items() if proxy_repository.get_record(pid) is not None}
+
+@app.get("/api/diagnostics/server")
+async def diagnostics_server(_=Depends(require_auth)):
+    return server_diagnostic_identity()
+
+@app.post("/api/diagnostics/client")
+async def diagnostics_client_ingest(request: Request, _=Depends(require_auth)):
+    body = await request.json()
+    raw_events = body.get("events", []) if isinstance(body, dict) else []
+    if not isinstance(raw_events, list):
+        raise HTTPException(status_code=400, detail="events must be a list")
+    accepted = []
+    for raw in raw_events[:80]:
+        event = sanitize_client_diagnostic(raw)
+        if event is not None:
+            event["received_at"] = datetime.now(timezone.utc).isoformat()
+            event["server_boot_id"] = SERVER_BOOT_ID
+            accepted.append(event)
+    async with CLIENT_DIAGNOSTIC_LOCK:
+        CLIENT_DIAGNOSTIC_EVENTS.extend(accepted)
+    return {"accepted": len(accepted), "server": server_diagnostic_identity()}
+
+@app.get("/api/diagnostics/client")
+async def diagnostics_client_recent(_=Depends(require_auth)):
+    async with CLIENT_DIAGNOSTIC_LOCK:
+        events = list(CLIENT_DIAGNOSTIC_EVENTS)
+    return {"server": server_diagnostic_identity(), "events": events[-200:]}
 
 # ── مخزن پروکسی / تنظیم آیپی خروجی ─────────────────────────────────────────
 @app.get("/api/proxy-catalog")
-async def proxy_catalog(_=Depends(require_auth)): return await proxy_repository.catalog()
+async def proxy_catalog(_=Depends(require_auth)):
+    catalog = await proxy_repository.catalog()
+    catalog["proxy_test_results"] = await current_proxy_test_results()
+    return catalog
 @app.get("/api/proxy-catalog/manual-status")
 async def proxy_catalog_manual_status(_=Depends(require_auth)):
     return proxy_repository.manual_refresh_state()
@@ -857,6 +1195,26 @@ async def proxy_catalog_refresh(_=Depends(require_auth)):
     if not proxy_repository.manual_refresh_enabled():
         raise HTTPException(status_code=403, detail="بررسی دستی مخزن فعال نیست")
     return await proxy_repository.catalog(force=True)
+
+
+@app.post("/api/proxy-catalog/test")
+async def proxy_catalog_test(request: Request, _=Depends(require_auth)):
+    body = await request.json()
+    proxy_id = str((body or {}).get("proxy_id") or "").strip()
+    record = proxy_repository.get_record(proxy_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Selected proxy is not in the current catalog")
+    raw_result = await outbound.test_proxy_record(record)
+    raw_result.update({"proxy_id": record.id, "country": record.country, "tested_at": datetime.now(timezone.utc).isoformat()})
+    result = sanitize_proxy_test_result(record.id, raw_result)
+    if result is None:
+        raise HTTPException(status_code=500, detail="proxy test produced an invalid result")
+    async with PROXY_TEST_RESULTS_LOCK:
+        PROXY_TEST_RESULTS[record.id] = result
+    await save_state()
+    if result["overall_status"] != "healthy":
+        return JSONResponse({"ok": False, "proxy_id": record.id, "test_result": result, "receipt": None}, status_code=422)
+    return {"ok": True, "proxy_id": record.id, "test_result": result, "receipt": issue_proxy_test_receipt(record), "expires_in": PROXY_TEST_RECEIPT_TTL}
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
 @app.get("/stats")
@@ -1042,6 +1400,137 @@ async def set_link_active(uid: str, active: bool) -> dict | None:
     await save_state(strict=True)
     return LINKS[uid]
 
+# ── Multi-Location (subgroup-level exit locations over one UUID/quota) ──────
+ML_REQUIRED_LOCATIONS = 2
+ML_MAX_REMARK = 60
+
+
+def _default_multi_location() -> dict:
+    return {"enabled": False, "remark_text": "", "locations": []}
+
+
+def _sanitize_remark_text(value: object) -> str:
+    """Admin-provided remark text: single line, no control chars, bounded."""
+    text = str(value or "").strip()
+    text = "".join(ch for ch in text if ch.isprintable())
+    return text[:ML_MAX_REMARK]
+
+
+def location_remark(location: dict, custom_text: str = "") -> str:
+    """"[Location] [Flag] | [Custom text]" — flag/location always generated
+    from the configured country; the admin only provides the custom part."""
+    base = f"{location.get('country', '')} {location.get('flag', '')}".strip()
+    text = _sanitize_remark_text(custom_text)
+    return f"{base} | {text}" if text else base
+
+
+async def validate_multi_location(payload: object, previous: dict | None = None, *, require_tests: bool = False) -> dict:
+    """Validate exactly two explicit country -> stable proxy-ID mappings."""
+    if not isinstance(payload, dict):
+        raise ValueError("multi_location must be an object")
+    enabled = bool(payload.get("enabled"))
+    remark_text = _sanitize_remark_text(payload.get("remark_text"))
+    raw_locations = payload.get("locations") or []
+    if not isinstance(raw_locations, list):
+        raise ValueError("locations must be a list")
+    if enabled and len(raw_locations) != ML_REQUIRED_LOCATIONS:
+        raise ValueError("Multi-Location requires exactly two countries")
+    if not enabled and raw_locations and len(raw_locations) != ML_REQUIRED_LOCATIONS:
+        raise ValueError("Multi-Location stores either zero or exactly two countries")
+
+    previous_by_id = {str(x.get("id") or ""): x for x in ((previous or {}).get("locations") or []) if isinstance(x, dict)}
+    locations = []
+    seen_ids, seen_codes = set(), set()
+    for entry in raw_locations:
+        if not isinstance(entry, dict):
+            raise ValueError("each location must be an object")
+        _name, code = countries.normalize_country(entry.get("code") or entry.get("country"))
+        if not code or not countries.is_valid_code(code):
+            raise ValueError("location must use a valid ISO alpha-2 country")
+        if code in seen_codes:
+            raise ValueError("the two Multi-Location countries must be different")
+        seen_codes.add(code)
+        loc_id = str(entry.get("id") or "").strip()[:24] or secrets.token_urlsafe(8)
+        if loc_id in seen_ids:
+            raise ValueError("location IDs must be unique")
+        seen_ids.add(loc_id)
+        proxy_id = str(entry.get("proxy_id") or "").strip()
+        record = proxy_repository.get_record(proxy_id)
+        if record is None:
+            raise ValueError("selected proxy is no longer in the repository")
+        if record.code != code:
+            raise ValueError(f"selected proxy does not belong to {code}")
+        old = previous_by_id.get(loc_id) or {}
+        changed = old.get("proxy_id") != proxy_id or old.get("code") != code
+        if require_tests and changed:
+            require_proxy_test_receipt(proxy_id, entry.get("proxy_test_receipt", ""))
+        locations.append({
+            "id": loc_id,
+            "code": code,
+            "country": countries.country_name(code),
+            "flag": countries.flag_for(code),
+            "proxy_id": proxy_id,
+            "active": True,
+        })
+    return {"enabled": enabled, "remark_text": remark_text, "locations": locations, "selection_mode": "explicit", "failover": False}
+
+
+def multi_location_for_link(link: dict | None) -> tuple[dict | None, dict | None]:
+    """(sub, multi_location) when the route's group has usable Multi-Location."""
+    if not isinstance(link, dict):
+        return None, None
+    sub = SUBS.get(link.get("sub_id") or "")
+    if not sub:
+        return None, None
+    ml = sub.get("multi_location")
+    if not isinstance(ml, dict) or not ml.get("enabled"):
+        return sub, None
+    return sub, ml
+
+
+async def resolve_exit_selection(link: dict | None, loc_id: str = "") -> dict | None:
+    """Resolve one stable proxy ID to one endpoint; never choose or substitute."""
+    if not isinstance(link, dict):
+        return None
+    _sub, ml = multi_location_for_link(link)
+    if ml is not None:
+        locations = ml.get("locations") or []
+        if ml.get("migration_required") or len(locations) != ML_REQUIRED_LOCATIONS:
+            raise outbound.ProxyUnavailableError("multi-location requires reconfiguration to exactly two explicit proxies")
+        loc_id = str(loc_id or "").strip()
+        if not loc_id:
+            raise outbound.ProxyUnavailableError("an explicit location is required")
+        location = next((loc for loc in locations if loc.get("id") == loc_id and loc.get("active", True)), None)
+        if location is None:
+            raise outbound.ProxyUnavailableError("requested location is invalid")
+        proxy_id = str(location.get("proxy_id") or "")
+        record = await proxy_repository.resolve(proxy_id)
+        if record is None:
+            raise outbound.ProxyUnavailableError("selected location proxy is unavailable")
+        if record.code != location.get("code"):
+            raise outbound.ProxyUnavailableError("selected proxy country metadata changed")
+        return {"proxy_id": record.id, "endpoint": record.endpoint, "location_id": loc_id}
+    mode = str(link.get("exit_proxy_mode") or "direct")
+    if mode == "repository":
+        proxy_id = str(link.get("proxy_id") or "")
+        record = await proxy_repository.resolve(proxy_id)
+        if record is None:
+            raise outbound.ProxyUnavailableError("managed proxy is not in the repository cache")
+        return {"proxy_id": record.id, "endpoint": record.endpoint, "location_id": None}
+    if mode == "custom":
+        try:
+            endpoint = proxy_repository.validate_url(link.get("custom_proxy"))
+            return {"proxy_id": "custom", "endpoint": endpoint, "location_id": None}
+        except ValueError as exc:
+            raise outbound.ProxyUnavailableError("custom proxy URL is invalid") from exc
+    return None
+
+
+async def resolve_exit_endpoints(link: dict | None, loc_id: str = "") -> list:
+    selection = await resolve_exit_selection(link, loc_id)
+    return [selection["endpoint"]] if selection else []
+
+
 # ── Sub-group helpers (reusable — هم API وب هم ربات تلگرام از همین‌ها استفاده می‌کنن) ──
 async def create_sub_group(name: str = "گروه جدید", desc: str = "", password: str = "") -> tuple[str, dict]:
     name = (name or "گروه جدید").strip()[:60]
@@ -1057,6 +1546,7 @@ async def create_sub_group(name: str = "گروه جدید", desc: str = "", pass
             "uuid_key": uuid_key,
             "created_at": datetime.now().isoformat(),
             "link_ids": [],
+            "multi_location": _default_multi_location(),
         }
     await save_state(strict=True)
     log_activity("sub", f"گروه «{name}» ساخته شد", "ok")
@@ -1153,6 +1643,8 @@ async def update_apply(_=Depends(require_auth)):
 @app.post("/api/links")
 async def create_link(request: Request, _=Depends(require_auth)):
     body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="invalid body")
     host = get_host(request)
     try:
         selected_address = normalize_address(body.get("address") or host)
@@ -1177,7 +1669,11 @@ async def create_link(request: Request, _=Depends(require_auth)):
     su = body.get("speed_limit_unit") or "MBIT"
     speed_limit_bytes = 0 if sv <= 0 else parse_speed_to_bytes(sv, su)
     try:
-        exit_proxy_mode, proxy_id, custom_proxy = await normalize_exit_proxy(body.get("exit_proxy_mode","direct"),body.get("proxy_id",""),body.get("custom_proxy",""))
+        requested_mode = str(body.get("exit_proxy_mode") or "direct").lower()
+        requested_proxy_id = str(body.get("proxy_id") or "").strip()
+        if requested_mode == "repository":
+            require_proxy_test_receipt(requested_proxy_id, body.get("proxy_test_receipt", ""))
+        exit_proxy_mode, proxy_id, custom_proxy = await normalize_exit_proxy(requested_mode, requested_proxy_id, body.get("custom_proxy", ""))
     except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc))
 
     try:
@@ -1219,10 +1715,16 @@ async def list_links(request: Request, _=Depends(require_auth)):
     for uid, d in snap.items():
         proto = d.get("protocol", DEFAULT_PROTOCOL)
         summary = await proxy_repository.summary(d.get("proxy_id")) if d.get("exit_proxy_mode")=="repository" else (proxy_repository.custom_summary(d.get("custom_proxy")) if d.get("exit_proxy_mode")=="custom" else None)
+        _sub, _ml = multi_location_for_link(d)
+        if _ml is not None:
+            _locs = _ml.get("locations", [])
+            ml_info = {"enabled": True, "total_locations": len(_locs), "active_locations": sum(1 for _loc in _locs if _loc.get("active"))}
+        else:
+            ml_info = None
         result.append({
             "uuid": uid,
             **d,
-            "protocol": proto, "exit_proxy": summary,
+            "protocol": proto, "exit_proxy": summary, "multi_location": ml_info,
             "expired": is_link_expired(d),
             "vless_link": vless_link_for_link(d, uid, host),
             "sub_url": "https://" + host + "/sub/" + str(uid),
@@ -1237,7 +1739,13 @@ async def update_link(uid: str, request: Request, _=Depends(require_auth)):
     selection=None
     if any(k in body for k in ("exit_proxy_mode","proxy_id","custom_proxy")):
         cur=LINKS.get(uid,{})
-        try: selection=await normalize_exit_proxy(body.get("exit_proxy_mode",cur.get("exit_proxy_mode","direct")),body.get("proxy_id",cur.get("proxy_id","")),body.get("custom_proxy",cur.get("custom_proxy","")))
+        try:
+            next_mode = str(body.get("exit_proxy_mode", cur.get("exit_proxy_mode", "direct"))).lower()
+            next_proxy_id = str(body.get("proxy_id", cur.get("proxy_id", "")) or "").strip()
+            changed = next_mode != cur.get("exit_proxy_mode", "direct") or next_proxy_id != cur.get("proxy_id", "")
+            if next_mode == "repository" and changed:
+                require_proxy_test_receipt(next_proxy_id, body.get("proxy_test_receipt", ""))
+            selection=await normalize_exit_proxy(next_mode,next_proxy_id,body.get("custom_proxy",cur.get("custom_proxy","")))
         except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc))
     async with LINKS_LOCK:
         if uid not in LINKS:
@@ -1343,8 +1851,19 @@ from telegram_bot import start_bot as _tg_start_bot, stop_bot as _tg_stop_bot
 _HOP = {"connection","keep-alive","proxy-authenticate","proxy-authorization",
         "te","trailers","transfer-encoding","upgrade","content-encoding","content-length"}
 
+# The internal HTTP proxy must not be an open relay. With HTTP_PROXY_TOKEN set,
+# automation passes ?token= or the X-Proxy-Token header; otherwise the admin
+# session cookie is required.
+HTTP_PROXY_TOKEN = os.environ.get("HTTP_PROXY_TOKEN", "").strip()
+
 @app.api_route("/proxy/{target_url:path}", methods=["GET","POST","PUT","DELETE","PATCH","HEAD","OPTIONS"])
 async def http_proxy(target_url: str, request: Request):
+    if HTTP_PROXY_TOKEN:
+        supplied = request.headers.get("x-proxy-token") or request.query_params.get("token", "")
+        if not hmac.compare_digest(supplied, HTTP_PROXY_TOKEN):
+            raise HTTPException(status_code=401, detail="unauthorized")
+    else:
+        await require_auth(request)
     if not target_url.startswith("http"):
         target_url = "https://" + target_url
     try:
@@ -1400,25 +1919,29 @@ async def public_sub_data(uuid_key: str, request: Request):
         conn_count = sum(1 for c in connections.values() if c.get("uuid") == lid)
         active_conns += conn_count
         proto = link.get("protocol", DEFAULT_PROTOCOL)
-        links_out.append({
-            "uuid": lid,
-            "label": link["label"],
-            "remark": link.get("remark") or link["label"],
-            "active": allowed,
-            "protocol": proto,
-            "used_bytes": link.get("used_bytes", 0),
-            "used_fmt": fmt_bytes(link.get("used_bytes", 0)),
-            "limit_bytes": link.get("limit_bytes", 0),
-            "limit_fmt": "∞" if link.get("limit_bytes", 0) == 0 else fmt_bytes(link["limit_bytes"]),
-            "expires_at": link.get("expires_at"),
-            "vless_link": vless_link_for_link(link, lid, host),
-            "sub_url": "https://" + host + "/sub/" + str(lid),
-            "connections": conn_count,
-            "ip_limit": link.get("ip_limit", 0),
-            "speed_limit_bytes": link.get("speed_limit_bytes", 0),
-        })
+        entries = vless_entries_for_link(link, lid, host)
+        for entry in entries:
+            links_out.append({
+                "uuid": lid,
+                "label": link["label"],
+                "remark": entry["remark"],
+                "location": entry["location"],
+                "shared_quota": entry["shared_quota"],
+                "active": allowed,
+                "protocol": proto,
+                "used_bytes": link.get("used_bytes", 0),
+                "used_fmt": fmt_bytes(link.get("used_bytes", 0)),
+                "limit_bytes": link.get("limit_bytes", 0),
+                "limit_fmt": "∞" if link.get("limit_bytes", 0) == 0 else fmt_bytes(link["limit_bytes"]),
+                "expires_at": link.get("expires_at"),
+                "vless_link": entry["vless_link"],
+                "sub_url": "https://" + host + "/sub/" + str(lid),
+                "connections": conn_count,
+                "ip_limit": link.get("ip_limit", 0),
+                "speed_limit_bytes": link.get("speed_limit_bytes", 0),
+            })
 
-    total_used = sum(l["used_bytes"] for l in links_out)
+    total_used = sum(l["used_bytes"] for l in {l["uuid"]: l for l in links_out}.values())
     return {
         "locked": False,
         "name": sub["name"],

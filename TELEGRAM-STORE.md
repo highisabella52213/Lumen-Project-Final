@@ -81,7 +81,7 @@
 ## ذخیره‌سازی
 
 - سفارش‌ها، کاربران، کیف پول، کدها و تنظیمات فروشگاه: `telegram_store.json`
-- کانفیگ‌ها و گروه‌های Subscription: `x4g_state.json`
+- کانفیگ‌ها و گروه‌های Subscription: `code_state.json`
 
 هر دو فایل زیر `DATA_DIR` ذخیره می‌شوند. در Railway حتماً Volume دائمی را روی `/data` متصل کنید. فایل فروشگاه با نوشتن اتمیک و permission برابر `0600` ذخیره می‌شود.
 

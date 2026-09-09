@@ -15,7 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-CURRENT_VERSION = "20.0.0"
+CURRENT_VERSION = "28.0.0"
 UPSTREAM_REPOSITORY = "highisabella52213/Lumen-Project-Final"
 GITHUB_API = "https://api.github.com"
 RAILWAY_GRAPHQL = "https://backboard.railway.com/graphql/v2"
@@ -114,7 +114,7 @@ async def load() -> dict:
 
 
 def _request_json(url: str, *, method: str = "GET", headers: dict | None = None, payload: dict | None = None, timeout: float = 12.0) -> dict:
-    merged = {"Accept": "application/json", "User-Agent": "Lumen-Relay-Updater/20"}
+    merged = {"Accept": "application/json", "User-Agent": "Lumen-Relay-Updater/21"}
     if headers:
         merged.update(headers)
     data = None

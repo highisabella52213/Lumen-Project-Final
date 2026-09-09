@@ -7,7 +7,7 @@ sys.path.insert(0,str(ROOT))
 class App:
     def __init__(self,*a,**k): self.routes=[]
     def _decorator(self,*a,**k): return lambda fn: fn
-    on_event=get=post=patch=delete=api_route=_decorator
+    on_event=get=post=patch=delete=api_route=middleware=_decorator
     def add_middleware(self,*a,**k): pass
     def add_api_websocket_route(self,*a,**k): pass
     def include_router(self,*a,**k): pass

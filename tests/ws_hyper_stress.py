@@ -54,6 +54,9 @@ main_stub.save_state = _save
 main_stub.log_activity = lambda *args, **kwargs: None
 import datetime as _datetime
 main_stub.now_ir = _datetime.datetime.now
+async def _resolve_exit(_link, _loc=""):
+    return []
+main_stub.resolve_exit_endpoints = _resolve_exit
 sys.modules["main"] = main_stub
 sys.path.insert(0, str(ROOT))
 

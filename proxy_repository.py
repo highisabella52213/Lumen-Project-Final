@@ -1,24 +1,41 @@
-"""Private S3-compatible repository for managed HTTP/HTTPS/SOCKS5 proxies."""
+"""Private S3-compatible repository for managed HTTP/HTTPS/SOCKS5 proxies.
+
+Security contract:
+- credentials stay server-side; environment variables win over the in-code
+  placeholders so deployments never have to edit source;
+- browser-facing payloads never include endpoints, credentials, or the proxy
+  protocol — only stable ID, flag, country and country code. Legacy percentages
+  are parsed for source compatibility but are never exposed or used for routing.
+
+Availability contract:
+- the dashboard API never blocks on S3 and never loses the last known-good
+  catalog when a refresh fails; a slow bucket can never stall the panel.
+"""
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import hmac
 import os
-import re
 import time
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit, urlunsplit
 
-# ── PRIVATE S3 CONFIGURATION — replace only the two credential placeholders. ──
+import countries
+
+# ── PRIVATE S3 CONFIGURATION ─────────────────────────────────────────────────
+# Prefer the LUMEN_S3_* environment variables; the two constants below are the
+# installer-managed fallback for source-based deployments.
 S3_ENDPOINT = "https://s3.us-west-2.idrivee2.com"
 S3_REGION = "us-west-2"
 S3_BUCKET = "bt2"
 S3_OBJECT_KEY = "www-32k-ort-org-021/proxy.txt"
 S3_ACCESS_KEY_ID = "41DUl3Aw2SiWuFW2OZ9P"
 S3_SECRET_ACCESS_KEY = "aID0sUgRZPle6RmGsxbOaULOwwYpACBMAs39vkjH"
+S3_ACCESS_ENV = "41DUl3Aw2SiWuFW2OZ9P"
+S3_SECRET_ENV = "aID0sUgRZPle6RmGsxbOaULOwwYpACBMAs39vkjH"
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Railway: the installer generates a long random enablement secret.
@@ -32,15 +49,31 @@ MAX_BYTES = 512 * 1024
 MAX_PROXIES = 1000
 _ALLOWED = {"http", "https", "socks5"}
 _ID_SALT = b"lumen-managed-v15"
-_CODES = {
-    "finland":"FI", "germany":"DE", "france":"FR", "netherlands":"NL",
-    "united states":"US", "usa":"US", "united kingdom":"GB", "uk":"GB",
-    "canada":"CA", "sweden":"SE", "norway":"NO", "denmark":"DK",
-    "switzerland":"CH", "austria":"AT", "poland":"PL", "italy":"IT",
-    "spain":"ES", "turkey":"TR", "iran":"IR", "japan":"JP",
-    "singapore":"SG", "india":"IN", "australia":"AU", "brazil":"BR",
-    "romania":"RO", "belgium":"BE", "ireland":"IE", "hong kong":"HK",
-}
+
+# Address inventory supplied without protocol/port/credentials/country metadata.
+# These are intentionally catalogued as non-selectable candidates: inventing a
+# usable proxy URL would be unsafe. A repository operator can complete each row
+# in proxy.txt using its canonical protocol://[credentials@]host:port#CC - N% form.
+PENDING_PROXY_ADDRESSES = (
+    "69.46.46.60",
+    "69.46.46.120",
+    "69.46.46.121",
+    "69.46.46.188",
+    "69.46.46.146",
+)
+
+
+def _access_key() -> str:
+    return os.environ.get(S3_ACCESS_ENV, "").strip() or S3_ACCESS_KEY_ID
+
+
+def _secret_key() -> str:
+    return os.environ.get(S3_SECRET_ENV, "").strip() or S3_SECRET_ACCESS_KEY
+
+
+def _configured() -> bool:
+    return _access_key() != "KEY_ID" and _secret_key() != "SECRET_ACCESS"
+
 
 @dataclass(frozen=True)
 class Record:
@@ -52,11 +85,13 @@ class Record:
     flag: str
     health: int
 
+
 _records: dict[str, Record] = {}
 _last = 0.0
 _error = "not loaded"
 _lock = asyncio.Lock()
 _refresh_task: asyncio.Task | None = None
+_inflight_refresh: asyncio.Task | None = None
 
 
 def _clean_secret(value: str) -> str:
@@ -104,22 +139,9 @@ def validate_url(value: str) -> str:
     return urlunsplit((parsed.scheme.lower(), parsed.netloc, "", "", ""))
 
 
-def _country(raw: str) -> tuple[str, str]:
-    raw = raw.strip()
-    if "|" in raw:
-        code, name = map(str.strip, raw.split("|", 1))
-        if re.fullmatch(r"[A-Za-z]{2}", code):
-            return name or code.upper(), code.upper()
-    if re.fullmatch(r"[A-Za-z]{2}", raw):
-        return raw.upper(), raw.upper()
-    return raw or "Unknown", _CODES.get(raw.casefold(), "")
-
-
-def _flag(code: str) -> str:
-    return "".join(chr(127397 + ord(c)) for c in code) if re.fullmatch(r"[A-Z]{2}", code) else "🌐"
-
-
 def parse_text(text: str) -> list[Record]:
+    """Parse proxy.txt; malformed lines are skipped, valid lines survive."""
+    import re
     result: list[Record] = []
     seen: set[str] = set()
     metadata = re.compile(r"^(.+?)\s*-\s*(\d{1,3})\s*%\s*$")
@@ -139,10 +161,14 @@ def parse_text(text: str) -> list[Record]:
         if identity in seen:
             continue
         seen.add(identity)
-        country, code = _country(match.group(1))
+        country, code = countries.normalize_country(match.group(1))
+        try:
+            health = max(0, min(100, int(match.group(2))))
+        except (TypeError, ValueError):
+            continue
         result.append(Record(
-            identity, endpoint, urlsplit(endpoint).scheme, country[:60], code,
-            _flag(code), max(0, min(100, int(match.group(2)))),
+            identity, endpoint, urlsplit(endpoint).scheme, country, code,
+            countries.flag_for(code), health,
         ))
         if len(result) >= MAX_PROXIES:
             break
@@ -157,8 +183,9 @@ def _signing_key(secret: str, date: str, region: str) -> bytes:
 
 
 def _signed_request(now: datetime | None = None) -> urllib.request.Request:
-    if S3_ACCESS_KEY_ID == "KEY_ID" or S3_SECRET_ACCESS_KEY == "SECRET_ACCESS":
-        raise RuntimeError("S3 credentials are not configured in proxy_repository.py")
+    access_key, secret_key = _access_key(), _secret_key()
+    if access_key == "KEY_ID" or secret_key == "SECRET_ACCESS":
+        raise RuntimeError("S3 credentials are not configured (set LUMEN_S3_ACCESS_KEY_ID / LUMEN_S3_SECRET_ACCESS_KEY)")
     endpoint = urlsplit(S3_ENDPOINT)
     if endpoint.scheme != "https" or not endpoint.hostname:
         raise RuntimeError("S3_ENDPOINT must be HTTPS")
@@ -172,8 +199,8 @@ def _signed_request(now: datetime | None = None) -> urllib.request.Request:
     canonical_request = "\n".join(["GET", canonical_uri, "", canonical_headers, signed_headers, payload_hash])
     scope = f"{date}/{S3_REGION}/s3/aws4_request"
     string_to_sign = "\n".join(["AWS4-HMAC-SHA256", amz_date, scope, hashlib.sha256(canonical_request.encode()).hexdigest()])
-    signature = hmac.new(_signing_key(S3_SECRET_ACCESS_KEY, date, S3_REGION), string_to_sign.encode(), hashlib.sha256).hexdigest()
-    authorization = f"AWS4-HMAC-SHA256 Credential={S3_ACCESS_KEY_ID}/{scope}, SignedHeaders={signed_headers}, Signature={signature}"
+    signature = hmac.new(_signing_key(secret_key, date, S3_REGION), string_to_sign.encode(), hashlib.sha256).hexdigest()
+    authorization = f"AWS4-HMAC-SHA256 Credential={access_key}/{scope}, SignedHeaders={signed_headers}, Signature={signature}"
     url = S3_ENDPOINT.rstrip("/") + canonical_uri
     return urllib.request.Request(url, headers={
         "Authorization": authorization,
@@ -191,13 +218,26 @@ def _fetch() -> str:
     return data.decode("utf-8-sig")
 
 
+def _state() -> str:
+    """loading / ready / stale / unconfigured / error — the panel keys off this."""
+    if not _configured():
+        return "unconfigured"
+    if _records:
+        return "stale" if _error else "ready"
+    if _error and _error != "not loaded":
+        return "error"
+    return "loading"
+
+
 def status() -> dict:
     return {
         "count": len(_records),
         "age_seconds": None if not _last else int(time.monotonic() - _last),
         "error": _error or None,
-        "configured": S3_ACCESS_KEY_ID != "KEY_ID" and S3_SECRET_ACCESS_KEY != "SECRET_ACCESS",
+        "state": _state(),
+        "configured": _configured(),
         "refresh_seconds": REFRESH_SECONDS,
+        "refreshing": _inflight_refresh is not None and not _inflight_refresh.done(),
         "manual_refresh_enabled": manual_refresh_enabled(),
         "manual_refresh_state": manual_refresh_state(),
     }
@@ -218,8 +258,19 @@ async def refresh(force: bool = False) -> dict:
             _last = time.monotonic()
             _error = ""
         except Exception as exc:
+            # Keep the last known-good catalog; a temporary S3 failure must not
+            # erase proxies that routes already use.
             _error = str(exc)[:200]
         return status()
+
+
+def kick_refresh(force: bool = False) -> bool:
+    """Start a background refresh if none is running. Returns True if started."""
+    global _inflight_refresh
+    if _inflight_refresh is not None and not _inflight_refresh.done():
+        return False
+    _inflight_refresh = asyncio.create_task(refresh(force=force), name="proxy-repository-fetch")
+    return True
 
 
 async def _periodic_loop() -> None:
@@ -235,21 +286,62 @@ def start_periodic_refresh() -> None:
 
 
 async def stop_periodic_refresh() -> None:
-    global _refresh_task
-    if _refresh_task is not None:
-        _refresh_task.cancel()
-        await asyncio.gather(_refresh_task, return_exceptions=True)
-        _refresh_task = None
+    global _refresh_task, _inflight_refresh
+    for task in (_refresh_task, _inflight_refresh):
+        if task is not None:
+            task.cancel()
+    await asyncio.gather(
+        *(t for t in (_refresh_task, _inflight_refresh) if t is not None),
+        return_exceptions=True,
+    )
+    _refresh_task = None
+    _inflight_refresh = None
 
 
 def public(record: Record) -> dict:
-    return {"id":record.id, "type":record.type, "country":record.country, "country_code":record.code, "flag":record.flag, "health":record.health, "managed":True, "safe":True}
+    # Protocol, endpoint, credentials, and legacy source percentage stay server-side.
+    return {"id": record.id, "country": record.country, "country_code": record.code, "flag": record.flag, "managed": True, "safe": True}
+
+
+def pending_address_catalog() -> list[dict]:
+    """Non-selectable address inventory. These are not proxy identities yet."""
+    return [
+        {
+            "candidate_id": hashlib.sha256(("pending-proxy-address\0" + address).encode()).hexdigest()[:24],
+            "address": address,
+            "selectable": False,
+            "missing": ["protocol", "port", "credentials_if_required", "country_code"],
+        }
+        for address in PENDING_PROXY_ADDRESSES
+    ]
 
 
 async def catalog(force: bool = False) -> dict:
-    await refresh(force)
-    items = sorted((public(x) for x in _records.values()), key=lambda x:(x["type"], -x["health"], x["country"]))
-    return {"proxies":items, "types":["http", "https", "socks5"], "status":status()}
+    """Dashboard catalog. Never blocks on S3: a stale/empty cache triggers a
+    background refresh and the current state is returned immediately."""
+    if force:
+        await refresh(force=True)
+    elif not _records or time.monotonic() - _last >= REFRESH_SECONDS:
+        kick_refresh(force=True)
+    items = sorted((public(x) for x in _records.values()), key=lambda x: (x["country"], x["id"]))
+    grouped: dict[str, dict] = {}
+    for row in items:
+        slot = grouped.setdefault(row["country_code"], {
+            "code": row["country_code"], "country": row["country"],
+            "flag": row["flag"], "count": 0,
+        })
+        slot["count"] += 1
+    countries_out = sorted(grouped.values(), key=lambda x: x["country"])
+    return {"proxies": items, "countries": countries_out, "pending_addresses": pending_address_catalog(), "status": status()}
+
+
+def get_record(proxy_id: str) -> Record | None:
+    """Synchronous cache-only lookup (validation paths, no I/O)."""
+    return _records.get(str(proxy_id or ""))
+
+
+def loaded() -> bool:
+    return bool(_records)
 
 
 async def resolve(proxy_id: str) -> Record | None:
@@ -258,10 +350,20 @@ async def resolve(proxy_id: str) -> Record | None:
     return _records.get(str(proxy_id or ""))
 
 
+async def resolve_many(proxy_ids) -> list[Record]:
+    """Ordered repository records for the given ids; unknown ids are skipped."""
+    out: list[Record] = []
+    for pid in proxy_ids or []:
+        record = _records.get(str(pid or ""))
+        if record is not None:
+            out.append(record)
+    return out
+
+
 async def summary(proxy_id: str) -> dict | None:
     record = await resolve(proxy_id)
     return public(record) if record else None
 
 
 def custom_summary(value: str) -> dict:
-    return {"type":urlsplit(validate_url(value)).scheme, "country":"Custom", "flag":"⚠️", "health":None, "managed":False, "safe":False}
+    return {"country": "Custom", "country_code": "", "flag": "⚠️", "health": None, "managed": False, "safe": False}

@@ -10,7 +10,9 @@ m.hourly_traffic=collections.defaultdict(int); m.connections={}; m.error_logs=[]
 m.is_link_allowed=lambda x:True; m.is_ip_allowed=lambda *a:True
 async def save(): pass
 m.save_state=save; m.log_activity=lambda *a,**k:None
-import datetime; m.now_ir=datetime.datetime.now; sys.modules['main']=m
+import datetime; m.now_ir=datetime.datetime.now
+async def _resolve_exit(_link,_loc=''): return []
+m.resolve_exit_endpoints=_resolve_exit; sys.modules['main']=m
 sys.path.insert(0,str(__import__('pathlib').Path(__file__).resolve().parents[1]))
 import relay_vless as R
 async def echo_server(host,family):

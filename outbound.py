@@ -1,10 +1,18 @@
 """Reliable per-config HTTP/HTTPS/SOCKS5 outbound connector.
 
-Compatibility goals:
-- bounded handshakes and a real first-byte check prevent silent ping=-1 hangs;
-- HTTPS-list entries support both TLS-to-proxy and common plain CONNECT semantics;
-- domain destinations retry through locally resolved IPs for restrictive proxies;
-- any failure closes the proxy socket and fails open to the direct route.
+Routing contract (fail-closed):
+- a config that selects a proxy ALWAYS exits through a proxy; there is no
+  silent fallback to the direct route — a failing proxy fails the connection
+  instead of leaking the server's own IP;
+- any payload (TLS, plain HTTP, DNS-over-TCP, …) uses the tunnel, so traffic
+  type can never decide whether the proxy is used;
+- destination domains are always handed to the selected proxy for remote DNS;
+- exactly one configured endpoint is accepted, so failure can never switch the
+  route to another proxy or to the Railway server.
+
+Compatibility goals retained:
+- bounded handshakes prevent hangs on dead proxies;
+- HTTPS-list entries support both TLS-to-proxy and plain CONNECT semantics.
 """
 from __future__ import annotations
 
@@ -14,19 +22,29 @@ import ipaddress
 import logging
 import socket
 import ssl
+import time
 from urllib.parse import unquote, urlsplit
 
 import proxy_repository as repo
 
 logger = logging.getLogger("Lumen.outbound")
 HANDSHAKE_TIMEOUT = 4.0
-FIRST_BYTE_TIMEOUT = 4.5
-PROXY_TOTAL_TIMEOUT = 7.0
 CONNECT_HEADER_MAX = 32 * 1024
-MAX_TARGET_ALTERNATIVES = 3
+FAILURE_BASE_SECONDS = 10.0
+FAILURE_MAX_SECONDS = 300.0
+
+class ProxyUnavailableError(OSError):
+    """A proxy was configured for this route but none can currently be used.
+    Raised so the caller can fail the connection instead of leaking a direct
+    server-side exit."""
+
+
 
 _dialer = asyncio.open_connection
 _tuner = None
+
+# endpoint -> (consecutive_failures, cooldown_until_monotonic)
+_proxy_health: dict[str, tuple[int, float]] = {}
 
 
 def set_dialer(fn):
@@ -87,34 +105,25 @@ def link_uses_proxy(link) -> bool:
     )
 
 
-def _complete_tls_record(data) -> bool:
-    packet = bytes(data or b"")
-    return (
-        len(packet) >= 5
-        and packet[0] == 0x16
-        and packet[1] == 0x03
-        and len(packet) >= 5 + int.from_bytes(packet[3:5], "big")
-    )
+def proxy_health_snapshot() -> dict:
+    """endpoint -> failure count for endpoints currently cooling down."""
+    now = time.monotonic()
+    return {ep: fails for ep, (fails, until) in _proxy_health.items() if until > now}
 
 
-async def _target_alternatives(host: str, port: int) -> list[str]:
-    bare = str(host).strip("[]")
-    result = [bare]
-    if _is_ip(bare):
-        return result
-    try:
-        infos = await asyncio.get_running_loop().getaddrinfo(
-            bare, port, type=socket.SOCK_STREAM
-        )
-    except Exception:
-        return result
-    for _family, _type, _proto, _canon, sockaddr in infos:
-        candidate = sockaddr[0]
-        if candidate not in result:
-            result.append(candidate)
-        if len(result) >= MAX_TARGET_ALTERNATIVES:
-            break
-    return result
+def _record_proxy_success(endpoint: str) -> None:
+    _proxy_health.pop(endpoint, None)
+
+
+def _record_proxy_failure(endpoint: str) -> None:
+    fails, _until = _proxy_health.get(endpoint, (0, 0.0))
+    fails = min(fails + 1, 8)
+    cooldown = min(FAILURE_BASE_SECONDS * (2 ** (fails - 1)), FAILURE_MAX_SECONDS)
+    _proxy_health[endpoint] = (fails, time.monotonic() + cooldown)
+    if len(_proxy_health) > 4096:
+        # Bound memory: drop the entries closest to recovery.
+        for key in sorted(_proxy_health, key=lambda k: _proxy_health[k][1])[:512]:
+            _proxy_health.pop(key, None)
 
 
 def _socks_target(host: str, port: int) -> bytes:
@@ -174,8 +183,9 @@ async def _socks_once(target, port, first_packet, params):
             writer.write(b"\x05\x01\x00" + _socks_target(target, port))
             await writer.drain()
             await _read_socks_reply(reader)
-            writer.write(first_packet)
-            await writer.drain()
+            if first_packet:
+                writer.write(first_packet)
+                await writer.drain()
         return reader, writer
     except BaseException:
         _close(writer)
@@ -183,15 +193,9 @@ async def _socks_once(target, port, first_packet, params):
 
 
 async def _socks_connect(target, port, first_packet, params):
-    last_error = None
-    for candidate in await _target_alternatives(target, port):
-        try:
-            return await _socks_once(candidate, port, first_packet, params)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            last_error = exc
-    raise last_error or OSError("SOCKS5 connection failed")
+    # Keep the hostname inside SOCKS5. Local DNS fallback would leak DNS and can
+    # make a tested identity behave differently at runtime.
+    return await _socks_once(target, port, first_packet, params)
 
 
 def _connect_authority(host: str, port: int) -> str:
@@ -239,8 +243,9 @@ async def _http_once(target, port, first_packet, params, tls_to_proxy: bool):
             code = int(fields[1]) if len(fields) > 1 and fields[1].isdigit() else -1
             if not 200 <= code < 300:
                 raise OSError("proxy CONNECT failed: HTTP " + str(code))
-            writer.write(first_packet)
-            await writer.drain()
+            if first_packet:
+                writer.write(first_packet)
+                await writer.drain()
         return reader, writer
     except BaseException:
         _close(writer)
@@ -248,7 +253,6 @@ async def _http_once(target, port, first_packet, params, tls_to_proxy: bool):
 
 
 async def _http_connect(target, port, first_packet, params):
-    targets = await _target_alternatives(target, port)
     if params["scheme"] == "https":
         # Most public `https://IP:port` lists mean an HTTP CONNECT proxy that
         # supports HTTPS destinations, not TLS transport to the proxy itself.
@@ -258,70 +262,115 @@ async def _http_connect(target, port, first_packet, params):
         transports = (False,)
     last_error = None
     for tls_to_proxy in transports:
-        for candidate in targets:
-            try:
-                return await _http_once(
-                    candidate, port, first_packet, params, tls_to_proxy=tls_to_proxy
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                last_error = exc
+        try:
+            return await _http_once(target, port, first_packet, params, tls_to_proxy=tls_to_proxy)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            last_error = exc
+    # Never resolve the destination locally. The selected proxy either accepts
+    # the hostname or the connection fails closed.
     raise last_error or OSError("HTTP proxy connection failed")
 
 
-async def _verify_downstream(reader):
-    chunk = await asyncio.wait_for(reader.read(65536), timeout=FIRST_BYTE_TIMEOUT)
-    if not chunk:
-        raise OSError("proxy tunnel returned no downstream data")
-    # StreamReader.read removed the prefix from its bytearray. No await occurs
-    # before feed_data, so putting it back preserves exact byte order.
-    reader.feed_data(chunk)
-    return reader
-
-
-async def _endpoint(link):
+async def _endpoint_from_link(link) -> str | None:
+    """Single endpoint for a per-config exit proxy. Fail-closed: a configured
+    proxy that cannot be resolved raises instead of silently going direct."""
     if not isinstance(link, dict):
         return None
     mode = str(link.get("exit_proxy_mode") or "direct")
     if mode == "repository":
         record = await repo.resolve(link.get("proxy_id"))
-        return record.endpoint if record else None
+        if record is None:
+            raise ProxyUnavailableError("managed proxy is not in the repository cache")
+        return record.endpoint
     if mode == "custom":
         try:
             return repo.validate_url(link.get("custom_proxy"))
-        except ValueError:
-            return None
+        except ValueError as exc:
+            raise ProxyUnavailableError("custom proxy URL is invalid") from exc
     return None
 
 
-async def open_outbound(address, port, first_packet=None, *, link=None, uuid=""):
-    endpoint = await _endpoint(link)
+async def _open_via(endpoint: str, address: str, port: int, packet: bytes):
+    params = parse_proxy_url(endpoint)
+    if params["scheme"] == "socks5":
+        return await _socks_connect(address, port, packet, params)
+    return await _http_connect(address, port, packet, params)
+
+
+async def open_outbound(address, port, first_packet=None, *, link=None, uuid="", endpoints=None, proxy_id=""):
+    """Open one deterministic upstream path.
+
+    No endpoints means an intentional direct route. Exactly one endpoint means
+    the exact selected managed/custom proxy. More than one endpoint is rejected
+    because retrying another proxy would violate explicit-selection semantics.
+    """
     packet = bytes(first_packet or b"")
-    # A validated response is possible only after a complete TLS ClientHello.
-    # Empty, delayed-too-far, non-TLS, and incomplete records fail open instead
-    # of creating a proxy tunnel that can silently sit at ping=-1.
-    if not endpoint or not _complete_tls_record(packet):
+    if endpoints is None:
+        single = await _endpoint_from_link(link)
+        endpoints = [single] if single else []
+    exact = list(dict.fromkeys(str(e) for e in endpoints or [] if e))
+    if not exact:
+        if link_uses_proxy(link):
+            raise ProxyUnavailableError("configured proxy did not resolve")
         reader, writer = await _dial(address, port)
         _tune(writer)
         return reader, writer, False
+    if len(exact) != 1:
+        raise ProxyUnavailableError("explicit routing accepts exactly one proxy endpoint")
 
-    writer = None
+    endpoint = exact[0]
     try:
-        async with asyncio.timeout(PROXY_TOTAL_TIMEOUT):
-            params = parse_proxy_url(endpoint)
-            if params["scheme"] == "socks5":
-                reader, writer = await _socks_connect(address, port, packet, params)
-            else:
-                reader, writer = await _http_connect(address, port, packet, params)
-            reader = await _verify_downstream(reader)
-            return reader, writer, True
+        reader, writer = await _open_via(endpoint, address, port, packet)
+        _record_proxy_success(endpoint)
+        return reader, writer, True
     except asyncio.CancelledError:
-        _close(writer)
         raise
     except Exception as exc:
+        _record_proxy_failure(endpoint)
+        # Log the stable ID only. Never log endpoint URLs or credentials.
+        logger.info("selected proxy failed id=%s target=%s:%d error=%s", str(proxy_id or "unknown")[:32], address, port, type(exc).__name__)
+        raise OSError(f"selected proxy {str(proxy_id or 'unknown')[:32]} failed closed") from exc
+
+
+async def _probe_https_target(endpoint: str, hostname: str, timeout: float = 10.0) -> dict:
+    """Issue one measured HTTPS GET through one exact proxy endpoint."""
+    writer = None
+    started = time.perf_counter()
+    try:
+        async with asyncio.timeout(timeout):
+            reader, writer = await _open_via(endpoint, hostname, 443, b"")
+            context = ssl.create_default_context()
+            await writer.start_tls(context, server_hostname=hostname)
+            request = (
+                f"GET / HTTP/1.1\r\nHost: {hostname}\r\n"
+                "User-Agent: Lumen-Exact-Proxy-Test/29\r\n"
+                "Accept: */*\r\nConnection: close\r\n\r\n"
+            ).encode("ascii")
+            writer.write(request)
+            await writer.drain()
+            status_line = await reader.readline()
+            fields = status_line.split()
+            status = int(fields[1]) if len(fields) > 1 and fields[1].isdigit() else 0
+            # Cloudflare and Google may redirect their root URL. A valid HTTPS
+            # response in the 2xx/3xx range proves outbound HTTPS connectivity.
+            return {"target": "https://" + hostname, "ok": 200 <= status < 400, "status": status or None, "latency_ms": round((time.perf_counter() - started) * 1000)}
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        return {"target": "https://" + hostname, "ok": False, "status": None, "latency_ms": round((time.perf_counter() - started) * 1000), "error": type(exc).__name__}
+    finally:
         _close(writer)
-        logger.warning("managed proxy failed; using direct route: %s", str(exc) or type(exc).__name__)
-        reader, direct_writer = await _dial(address, port)
-        _tune(direct_writer)
-        return reader, direct_writer, False
+        if writer is not None:
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+
+async def test_proxy_record(record, timeout: float = 10.0) -> dict:
+    """Test both required targets through the exact selected record only."""
+    targets = ("cloudflare.com", "google.com")
+    results = await asyncio.gather(*(_probe_https_target(record.endpoint, host, timeout) for host in targets))
+    return {"proxy_id": record.id, "ok": all(item.get("ok") for item in results), "checks": list(results)}

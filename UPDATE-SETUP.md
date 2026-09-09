@@ -1,52 +1,72 @@
-# Lumen public one-file Cloudflare installer — v20
+# Lumen Railway installer — v28
 
-The installer is a public, reusable one-file application. Every user should deploy `cloudflare-installer/worker.js` in their **own** Cloudflare account and must never submit tokens to a Worker controlled by another person.
+نصاب Cloudflare حذف شده است. کل برنامه قابل‌دیپلوی داخل پوشه `railway-installer/` قرار دارد و به متغیر محیطی یا ذخیره‌سازی توکن روی خود نصب‌کننده نیاز ندارد.
 
-## 1. Create the two tokens
+## 1. ساخت توکن‌ها
 
-1. GitHub classic token: <https://github.com/settings/tokens/new?scopes=public_repo&description=Lumen%20Cloudflare%20Installer>
-   - Keep the preselected `public_repo` scope.
-2. Railway account token: <https://railway.com/account/tokens>
-   - Use an Account Token; a Project Token cannot create a project.
-3. Connect GitHub to Railway and allow access to the fork: <https://railway.com/account/integrations>
+1. GitHub classic token با دسترسی `public_repo`:
+   <https://github.com/settings/tokens/new?scopes=public_repo&description=Lumen%20Railway%20Installer>
+2. Railway Account Token:
+   <https://railway.com/account/tokens>
+3. اتصال GitHub به Railway و دادن دسترسی به فورک:
+   <https://railway.com/account/integrations>
 
-## 2. Deploy the Worker
+Project Token کافی نیست، چون نصاب باید پروژه جدید ایجاد کند.
 
-1. Open Cloudflare Workers: <https://dash.cloudflare.com/?to=/:account/workers-and-pages/create>
-2. Create a Worker with compatibility date **2026-08-04 or later**.
-3. Replace the starter code with the complete contents of `cloudflare-installer/worker.js` and deploy.
-4. Open the Worker URL, enter the two tokens, and start setup.
-5. Save the generated admin password and open the returned `/dashboard` URL.
+## 2. دیپلوی خود نصب‌کننده روی Railway
 
-The Worker stars and forks the fixed official source, creates the Railway project/service, protected variables, mandatory `/data` Volume and public domain, then starts deployment.
+1. در Railway گزینه **New Project → Deploy from GitHub repo** را انتخاب کنید.
+2. همین مخزن را انتخاب کنید.
+3. در تنظیمات سرویس، **Root Directory** را روی `/railway-installer` بگذارید.
+4. Railway فایل `railway.json` و `Dockerfile` داخل همان پوشه را تشخیص می‌دهد؛ متغیر محیطی لازم نیست.
+5. Health Check روی `/health` اجرا می‌شود و تا تمام‌شدن بررسی شبکه منتظر می‌ماند.
+6. بعد از سالم‌شدن Deployment، از بخش Networking یک دامنه عمومی بسازید و صفحه نصب را باز کنید.
 
-## Enforced HTTP proxy
+## 3. بررسی مسیرها هنگام Deployment
 
-All server-side requests from the Cloudflare installer to GitHub and Railway are forced through:
+این شش پروکسی HTTP CONNECT داخل کد باقی مانده‌اند:
 
 ```text
-176.111.37.216:39811
+http://176.111.37.216:39811
+http://107.167.18.122:443
+http://130.110.103.245:3128
+http://176.111.37.5:39811
+http://94.249.197.220:40001
+http://13.203.138.32:3001
 ```
 
-The Worker creates an HTTP CONNECT tunnel and then performs TLS with the destination hostname and certificate validation. GitHub/Railway tokens remain inside end-to-end TLS. There is intentionally **no direct fallback**; if the proxy is unavailable, installation stops with a clear bilingual error.
+هنگام بالا آمدن سرویس، همه پروکسی‌ها از همان Railway Deployment روی هر دو مقصد زیر آزمایش می‌شوند:
 
-## Manual deployments
+```text
+GET  https://api.github.com/meta
+POST https://backboard.railway.com/graphql/v2
+```
 
-If someone deploys the repository manually on Railway, open **Lumen → Settings → Update credentials** and enter:
+هر مسیر فقط وقتی سالم است که هر دو بررسی را پاس کند. سریع‌ترین پروکسی سالم انتخاب می‌شود. اگر هر شش پروکسی شکست بخورند، مسیر مستقیم Railway روی هر دو مقصد آزمایش می‌شود. اگر مسیر مستقیم هم شکست بخورد، `/health` کد 503 می‌دهد و نصب جدید آغاز نمی‌شود.
 
-- the deployed repository (`owner/repository`),
-- branch,
-- Railway Account Token,
-- GitHub token.
+نتیجه بدون اطلاعات محرمانه از این مسیرها قابل مشاهده است:
 
-Lumen verifies the repository/token relationship and saves the values as protected Railway service variables. Installer-created values appear filled by status, stay locked, and are never exposed. Changing any protected value requires acknowledging a warning first; blank token fields keep existing secrets.
+```text
+GET  /health
+GET  /api/network
+POST /api/network/refresh
+```
 
-## Security
+بررسی شبکه هر پنج دقیقه تکرار می‌شود و ابتدای هر نصب نیز تمام مسیرها دوباره آزمایش می‌شوند. مسیر انتخاب‌شده برای کل همان نصب ثابت می‌ماند.
 
-- The Worker has no KV, D1, Durable Object, Cache API, analytics, or token persistence.
-- Tokens are copied only into each user's own protected Railway service variables.
-- Responses use `Cache-Control: no-store` and a strict Content Security Policy.
-- The fixed proxy can observe destination names and connection metadata, but CONNECT keeps API payloads and tokens inside verified TLS.
-- Rotate/revoke both tokens immediately if they are entered into an untrusted Worker.
+## 4. اجرای نصب Lumen
 
-Official source: <https://github.com/highisabella52213/Lumen-Project-Final>
+1. دامنه عمومی نصب‌کننده را باز کنید.
+2. GitHub token و Railway Account Token را وارد کنید.
+3. نصب را شروع کنید.
+4. نصاب سورس رسمی `highisabella52213/Lumen-Project-Final` را Star/Fork می‌کند.
+5. پروژه مقصد، سرویس، متغیرهای محافظت‌شده، Volume الزامی `/data`، دامنه و Deployment ساخته می‌شوند.
+6. لینک پنل، رمز ادمین یک‌بارمصرف و مسیر شبکه انتخاب‌شده نمایش داده می‌شوند.
+
+## امنیت
+
+- توکن‌های واردشده فقط در حافظه همان درخواست نگه‌داری می‌شوند و در فایل یا لاگ نصب‌کننده نوشته نمی‌شوند.
+- درخواست‌های probe هیچ هدر Authorization ندارند.
+- تونل پروکسی پس از HTTP CONNECT، TLS مقصد را با SNI و `rejectUnauthorized: true` اعتبارسنجی می‌کند.
+- مقصدهای شبکه به `api.github.com:443` و `backboard.railway.com:443` محدود شده‌اند.
+- نصب‌کننده را در حساب Railway خودتان دیپلوی کنید و توکن‌ها را داخل نمونه متعلق به فرد دیگری وارد نکنید.
