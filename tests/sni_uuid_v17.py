@@ -5,11 +5,12 @@ from urllib.parse import parse_qs,urlsplit
 from uuid import UUID,uuid4
 root=Path(__file__).resolve().parents[1];sys.path.insert(0,str(root))
 from config_address import authority_host,link_hosts,normalize_address
+from transports import TRANSPORTS
 text=(root/'main.py').read_text();tree=ast.parse(text)
 names={'generate_uuid','normalize_requested_uuid','generate_vless_link'}
 selected=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names]
 from urllib.parse import quote
-ns={'UUID':UUID,'uuid4':uuid4,'quote':quote,'authority_host':authority_host,'link_hosts':link_hosts,'normalize_address':normalize_address,'DEFAULT_FINGERPRINT':'chrome','FINGERPRINTS':('chrome',),'DEFAULT_ALPN_BY_PROTOCOL':{'vless-ws':'http/1.1'},'DEFAULT_PROTOCOL':'vless-ws','DEFAULT_PORT':443,'MIN_PORT':1,'MAX_PORT':65535}
+ns={'UUID':UUID,'uuid4':uuid4,'quote':quote,'authority_host':authority_host,'link_hosts':link_hosts,'normalize_address':normalize_address,'TRANSPORTS':TRANSPORTS,'DEFAULT_FINGERPRINT':'chrome','FINGERPRINTS':('chrome',),'DEFAULT_ALPN_BY_PROTOCOL':{'vless-ws':'http/1.1'},'DEFAULT_PROTOCOL':'vless-ws','DEFAULT_PORT':443,'MIN_PORT':1,'MAX_PORT':65535}
 exec(compile(ast.Module(body=selected,type_ignores=[]),str(root/'main.py'),'exec'),ns)
 custom='6BA7B810-9DAD-11D1-80B4-00C04FD430C8'
 link=ns['generate_vless_link'](custom,'service.example.com',address='104.16.1.1',sni='front.example.org');q=parse_qs(urlsplit(link).query)

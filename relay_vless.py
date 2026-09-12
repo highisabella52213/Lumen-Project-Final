@@ -15,6 +15,7 @@ import socket
 import time
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -67,6 +68,12 @@ PREFERRED_CC = (b"bbr", b"cubic")
 CONNECT_TIMEOUT = 10.0
 HEADER_TIMEOUT = 15.0
 HEADER_MAX = 16 * 1024
+RAW_HALF_CLOSE_TIMEOUT = 300.0
+# Raw TCP has no frame boundary to keep a large burst naturally bounded like a
+# WebSocket message.  Use smaller per-stream chunks/windows while leaving the
+# protected WebSocket tuning unchanged.
+RAW_STREAM_CHUNK = 256 * 1024
+RAW_WRITE_HIGH = 1024 * 1024
 
 PARALLEL_CONNECT = 6
 DUAL_STACK_DELAY = 0.0          # first IPv6 and first IPv4 start together
@@ -89,15 +96,24 @@ _route_health: dict[tuple, tuple[float, int, float]] = {}
 class _AdaptiveFlow:
     """AIMD write-buffer threshold for WS -> target TCP."""
 
-    __slots__ = ("high_water",)
+    __slots__ = ("high_water", "max_high_water")
 
-    def __init__(self) -> None:
-        self.high_water = WRITE_HW_START
+    def __init__(
+        self,
+        high_water: int = WRITE_HW_START,
+        max_high_water: int = WRITE_HW_MAX,
+    ) -> None:
+        self.max_high_water = min(
+            WRITE_HW_MAX, max(WRITE_HW_MIN, max_high_water)
+        )
+        self.high_water = min(
+            self.max_high_water, max(WRITE_HW_MIN, high_water)
+        )
 
     def observe(self, drain_ms: float, transport: asyncio.BaseTransport) -> None:
         if drain_ms <= FLOW_FAST_DRAIN_MS:
             self.high_water = min(
-                int(self.high_water * 1.5) + 64 * 1024, WRITE_HW_MAX
+                int(self.high_water * 1.5) + 64 * 1024, self.max_high_water
             )
         elif drain_ms >= FLOW_SLOW_DRAIN_MS:
             self.high_water = max(self.high_water // 2, WRITE_HW_MIN)
@@ -147,6 +163,49 @@ class _WSIO:
     async def flush(self) -> None:
         if self._flush is not None:
             await self._flush()
+
+    async def close(self, *, code: int = 1000, reason: str = "") -> None:
+        await self.ws.close(code=code, reason=reason)
+
+
+class _RawIO:
+    """Raw TCP byte-stream adapter; no HTTP or WebSocket framing is involved."""
+
+    __slots__ = ("reader", "writer", "_collecting_header")
+
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        self.reader = reader
+        self.writer = writer
+        self._collecting_header = True
+
+    async def receive(self) -> dict:
+        # Before authentication there is no reason to accept the normal relay
+        # chunk size. A malformed peer must not make every half-open Raw TCP
+        # session retain an 8 MiB pre-authentication buffer.
+        read_size = HEADER_MAX if self._collecting_header else RAW_STREAM_CHUNK
+        data = await self.reader.read(read_size)
+        return (
+            {"type": "stream.receive", "bytes": data}
+            if data
+            else {"type": "stream.disconnect"}
+        )
+
+    def finish_header(self) -> None:
+        self._collecting_header = False
+
+    def receive_nowait(self) -> None:
+        return None
+
+    async def send_bytes(self, data: bytes | bytearray | memoryview) -> None:
+        self.writer.write(data)
+        if self.writer.transport.get_write_buffer_size() >= RAW_WRITE_HIGH:
+            await self.writer.drain()
+
+    async def flush(self) -> None:
+        await self.writer.drain()
+
+    async def close(self, *, code: int = 1000, reason: str = "") -> None:
+        self.writer.close()
 
 
 def _ws_protocol_owner(ws: WebSocket) -> Any | None:
@@ -596,6 +655,19 @@ def _parse_vless_header(chunk: bytes | bytearray | memoryview):
     return command, address, port, bytes(view[pos:])
 
 
+def _vless_uuid_from_header(chunk: bytes | bytearray | memoryview) -> str:
+    """Return a standard VLESS v0 UUID for a Raw TCP connection."""
+    view = memoryview(chunk)
+    if len(view) < 17:
+        raise ValueError("incomplete vless identity")
+    if view[0] != 0:
+        raise ValueError("unsupported vless version")
+    try:
+        return str(UUID(bytes=bytes(view[1:17])))
+    except (ValueError, AttributeError) as exc:
+        raise ValueError("invalid vless uuid") from exc
+
+
 async def check_and_use(uid: str, nbytes: int) -> bool:
     if nbytes <= 0:
         return True
@@ -614,18 +686,19 @@ def _speed_limited(uid: str) -> bool:
     return bool(link and int(link.get("speed_limit_bytes", 0) or 0) > 0)
 
 
-# ── Relay: WebSocket -> target TCP ──────────────────────────────────────────
-async def relay_ws_to_tcp(
-    ws: WebSocket,
+# ── Relay: client stream -> target TCP ──────────────────────────────────────
+async def relay_client_to_tcp(
+    io: Any,
     writer: asyncio.StreamWriter,
     conn_id: str,
     uid: str,
-    io: _WSIO | None = None,
+    *,
+    write_high_water: int = WRITE_HW_START,
+    write_max_high_water: int = WRITE_HW_MAX,
 ):
-    io = io or _WSIO(ws)
     gate = QuotaGate(uid, check_and_use)
     conn = connections.get(conn_id)
-    flow = _AdaptiveFlow()
+    flow = _AdaptiveFlow(write_high_water, write_max_high_water)
     limited = _speed_limited(uid)
     transport = writer.transport
     ticks = 0
@@ -646,7 +719,7 @@ async def relay_ws_to_tcp(
             burst_bytes = 0
             while message is not None:
                 burst_messages += 1
-                if message["type"] == "websocket.disconnect":
+                if str(message.get("type", "")).endswith("disconnect"):
                     stop = True
                     break
                 data = message.get("bytes")
@@ -659,7 +732,7 @@ async def relay_ws_to_tcp(
                     if account_batch < 0 or (
                         account_batch and not await commit(account_batch)
                     ):
-                        await ws.close(code=1008, reason="quota/disabled/unknown")
+                        await io.close(code=1008, reason="quota/disabled/unknown")
                         stop = True
                         break
 
@@ -685,7 +758,7 @@ async def relay_ws_to_tcp(
                 ):
                     break
                 message = receive_nowait()
-    except (WebSocketDisconnect, ConnectionError, OSError):
+    except (WebSocketDisconnect, ConnectionError, OSError, asyncio.IncompleteReadError):
         pass
     finally:
         try:
@@ -696,6 +769,17 @@ async def relay_ws_to_tcp(
             writer.write_eof()
         except Exception:
             pass
+
+
+async def relay_ws_to_tcp(
+    ws: WebSocket,
+    writer: asyncio.StreamWriter,
+    conn_id: str,
+    uid: str,
+    io: _WSIO | None = None,
+):
+    """Compatibility wrapper preserving the established WebSocket hot path."""
+    return await relay_client_to_tcp(io or _WSIO(ws), writer, conn_id, uid)
 
 
 async def _read_stream_chunk(
@@ -746,15 +830,13 @@ async def _read_stream_chunk(
     return data
 
 
-# ── Relay: target TCP -> WebSocket ──────────────────────────────────────────
-async def relay_tcp_to_ws(
-    ws: WebSocket,
+# ── Relay: target TCP -> client stream ──────────────────────────────────────
+async def relay_tcp_to_client(
+    io: Any,
     reader: asyncio.StreamReader,
     conn_id: str,
     uid: str,
-    io: _WSIO | None = None,
 ):
-    io = io or _WSIO(ws)
     gate = QuotaGate(uid, check_and_use)
     conn = connections.get(conn_id)
     limited = _speed_limited(uid)
@@ -785,7 +867,7 @@ async def relay_tcp_to_ws(
             if account_batch < 0 or (
                 account_batch and not await commit(account_batch)
             ):
-                await ws.close(code=1008, reason="quota/disabled/unknown")
+                await io.close(code=1008, reason="quota/disabled/unknown")
                 break
 
             ticks += 1
@@ -797,7 +879,7 @@ async def relay_tcp_to_ws(
             if conn is not None:
                 conn["bytes"] += nbytes
             await send_bytes(data)
-    except (WebSocketDisconnect, ConnectionError, OSError):
+    except (WebSocketDisconnect, ConnectionError, OSError, asyncio.IncompleteReadError):
         pass
     finally:
         try:
@@ -808,6 +890,17 @@ async def relay_tcp_to_ws(
             await io.flush()
         except Exception:
             pass
+
+
+async def relay_tcp_to_ws(
+    ws: WebSocket,
+    reader: asyncio.StreamReader,
+    conn_id: str,
+    uid: str,
+    io: _WSIO | None = None,
+):
+    """Compatibility wrapper preserving the established WebSocket hot path."""
+    return await relay_tcp_to_client(io or _WSIO(ws), reader, conn_id, uid)
 
 
 def _loc_param(ws) -> str:
@@ -833,7 +926,11 @@ def _loc_param(ws) -> str:
 
 # ── Tunnel lifecycle ─────────────────────────────────────────────────────────
 async def _collect_header(
-    io: _WSIO, early: bytes, *, prefetch_payload: bool = False
+    io,
+    early: bytes,
+    *,
+    prefetch_payload: bool = False,
+    include_uuid: bool = False,
 ):
     """Collect VLESS header and a bounded complete TLS record for proxies.
 
@@ -844,6 +941,8 @@ async def _collect_header(
     buffer = bytearray(early)
     prefetch_deadline = None
     while True:
+        if include_uuid and buffer and buffer[0] != 0:
+            raise ValueError("unsupported vless version")
         parsed = None
         if len(buffer) >= 19:
             try:
@@ -853,19 +952,23 @@ async def _collect_header(
         if parsed is not None:
             payload = parsed[3]
             if not prefetch_payload:
-                return (*parsed, len(buffer))
+                result = (*parsed, len(buffer))
+                return (*result, _vless_uuid_from_header(buffer)) if include_uuid else result
             if payload:
                 if payload[0] != 0x16 or (len(payload) >= 2 and payload[1] != 0x03):
-                    return (*parsed, len(buffer))
+                    result = (*parsed, len(buffer))
+                    return (*result, _vless_uuid_from_header(buffer)) if include_uuid else result
             if len(payload) >= 5:
                 record_size = 5 + int.from_bytes(payload[3:5], "big")
                 if len(payload) >= record_size:
-                    return (*parsed, len(buffer))
+                    result = (*parsed, len(buffer))
+                    return (*result, _vless_uuid_from_header(buffer)) if include_uuid else result
             if prefetch_deadline is None:
                 prefetch_deadline = time.monotonic() + 0.8
             remaining = prefetch_deadline - time.monotonic()
             if remaining <= 0:
-                return (*parsed, len(buffer))
+                result = (*parsed, len(buffer))
+                return (*result, _vless_uuid_from_header(buffer)) if include_uuid else result
             timeout = min(remaining, HEADER_TIMEOUT)
         else:
             if len(buffer) >= HEADER_MAX:
@@ -877,8 +980,8 @@ async def _collect_header(
             if parsed is not None:
                 return (*parsed, len(buffer))
             raise
-        if message["type"] == "websocket.disconnect":
-            raise WebSocketDisconnect(1006)
+        if str(message.get("type", "")).endswith("disconnect"):
+            raise ConnectionError("client disconnected before VLESS request")
         chunk = message.get("bytes")
         if chunk is None and message.get("text") is not None:
             try:
@@ -889,103 +992,135 @@ async def _collect_header(
             buffer.extend(chunk)
 
 
-async def websocket_tunnel(ws: WebSocket, uuid: str):
-    early = _early_data(ws)
-    await ws.accept()
-    _tune_client_socket(ws)
-    io = _WSIO(ws)
+async def _run_vless_session(
+    io: Any,
+    uuid: str,
+    *,
+    client_ip: str,
+    location_id: str,
+    transport: str,
+    early: bytes = b"",
+    prepared_header: tuple | None = None,
+    allow_client_half_close: bool = False,
+    write_high_water: int = WRITE_HW_START,
+    write_max_high_water: int = WRITE_HW_MAX,
+):
+    """Common VLESS session: authorization, parsing, exact route, and cleanup.
 
+    Adapters supply only a byte stream and a previously validated location
+    identity.  This intentionally keeps every transport on the same selected
+    proxy and fail-closed path.
+    """
     async with LINKS_LOCK:
         link = LINKS.get(uuid)
 
     if not is_link_allowed(link):
-        logger.warning("WS rejected uuid=%s… (not allowed)", uuid[:8])
-        await ws.close(code=1008, reason="not authorized")
+        logger.warning("%s rejected uuid=%s… (not allowed)", transport, uuid[:8])
+        await io.close(code=1008, reason="not authorized")
         return
 
-    ip = _ws_client_ip(ws)
-    if not is_ip_allowed(link, uuid, ip):
-        logger.warning("WS rejected uuid=%s… ip=%s (ip limit)", uuid[:8], ip)
+    if not is_ip_allowed(link, uuid, client_ip):
+        logger.warning("%s rejected uuid=%s… ip=%s (ip limit)", transport, uuid[:8], client_ip)
         log_activity(
             "connection",
-            f"اتصال {ip} به کانفیگ «{link.get('label', '?')}» رد شد (محدودیت تعداد آی‌پی)",
+            f"اتصال {client_ip} به کانفیگ «{link.get('label', '?')}» رد شد (محدودیت تعداد آی‌پی)",
             "warn",
         )
-        await ws.close(code=1008, reason="ip limit reached")
+        await io.close(code=1008, reason="ip limit reached")
         return
 
     conn_id = secrets.token_urlsafe(6)
     connections[conn_id] = {
         "uuid": uuid,
-        "ip": ip,
-        "transport": "vless-ws-hyper",
+        "ip": client_ip,
+        "transport": transport,
         "connected_at": datetime.now().isoformat(),
         "bytes": 0,
     }
     logger.info(
-        "WS [%s] uuid=%s… ip=%s ed=%dB total=%d",
+        "%s [%s] uuid=%s… ip=%s initial=%dB total=%d",
+        transport,
         conn_id,
         uuid[:8],
-        ip,
+        client_ip,
         len(early),
         len(connections),
     )
     log_activity(
         "connection",
-        f"اتصال جدید از {ip} (کانفیگ {link.get('label', '?')})",
+        f"اتصال جدید از {client_ip} (کانفیگ {link.get('label', '?')})",
         "info",
     )
 
     writer: asyncio.StreamWriter | None = None
     try:
-        # No payload prefetch: the exit path is chosen independently of the
-        # traffic type, so there is nothing to wait for before connecting.
-        _command, address, port, payload, header_bytes = await _collect_header(
-            io, early, prefetch_payload=False
-        )
+        if prepared_header is None:
+            # No payload prefetch: the exit path is chosen independently of
+            # traffic type, so no transport may influence proxy selection.
+            _command, address, port, payload, header_bytes = await _collect_header(
+                io, early, prefetch_payload=False
+            )
+        else:
+            _command, address, port, payload, header_bytes = prepared_header
         if not await check_and_use(uuid, header_bytes):
-            await ws.close(code=1008, reason="quota/disabled")
+            await io.close(code=1008, reason="quota/disabled")
             return
 
         stats["total_requests"] = int(stats.get("total_requests", 0) or 0) + 1
         conn = connections.get(conn_id)
         if conn is not None:
             conn["bytes"] += header_bytes
-        logger.info("WS [%s] -> %s:%d", conn_id, address, port)
+        logger.info("%s [%s] -> %s:%d", transport, conn_id, address, port)
 
         try:
-            exit_selection = await _resolve_exact_selection(link, _loc_param(ws))
+            exit_selection = await _resolve_exact_selection(link, location_id)
             exit_endpoints = [exit_selection["endpoint"]] if exit_selection else []
             selected_proxy_id = exit_selection["proxy_id"] if exit_selection else ""
             if conn is not None:
                 conn["proxy_id"] = selected_proxy_id or None
                 conn["location_id"] = exit_selection.get("location_id") if exit_selection else None
         except outbound.ProxyUnavailableError as exc:
-            logger.warning("WS [%s] exit proxy unavailable: %s", conn_id, exc)
+            logger.warning("%s [%s] exit proxy unavailable: %s", transport, conn_id, exc)
             stats["total_errors"] = int(stats.get("total_errors", 0) or 0) + 1
             error_logs.append(
                 {"error": "exit proxy unavailable", "time": datetime.now().isoformat()}
             )
-            await ws.close(code=1011, reason="exit proxy unavailable")
+            await io.close(code=1011, reason="exit proxy unavailable")
             return
         reader, writer, payload_sent = await open_outbound(
             address, port, payload, uuid=uuid, endpoints=exit_endpoints, proxy_id=selected_proxy_id
         )
-        _tune_socket(writer, WRITE_HW_START)
+        _tune_socket(writer, write_high_water)
         if payload and not payload_sent:
             writer.write(payload)
             await writer.drain()
 
         upload = asyncio.create_task(
-            relay_ws_to_tcp(ws, writer, conn_id, uuid, io), name=f"ws-up-{conn_id}"
+            relay_client_to_tcp(
+                io,
+                writer,
+                conn_id,
+                uuid,
+                write_high_water=write_high_water,
+                write_max_high_water=write_max_high_water,
+            ),
+            name=f"{transport}-up-{conn_id}",
         )
         download = asyncio.create_task(
-            relay_tcp_to_ws(ws, reader, conn_id, uuid, io),
-            name=f"ws-down-{conn_id}",
+            relay_tcp_to_client(io, reader, conn_id, uuid),
+            name=f"{transport}-down-{conn_id}",
         )
         done, pending = await asyncio.wait(
             {upload, download}, return_when=asyncio.FIRST_COMPLETED
         )
+        if allow_client_half_close and upload in done and download in pending:
+            # A TCP FIN is not a WebSocket close.  The target may still have a
+            # valid response to send after the client has half-closed.
+            try:
+                await asyncio.wait_for(download, timeout=RAW_HALF_CLOSE_TIMEOUT)
+                pending = set()
+            except asyncio.TimeoutError:
+                pending = {download}
         for task in pending:
             task.cancel()
         if pending:
@@ -996,7 +1131,12 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
             if error is not None:
                 raise error
 
-        await io.flush()
+        try:
+            await io.flush()
+        except (ConnectionError, OSError):
+            # A peer that closes immediately after receiving the final target
+            # bytes is a normal raw-stream termination, not a relay failure.
+            pass
         try:
             await save_state(rotate=False)
         except TypeError as exc:
@@ -1015,7 +1155,7 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
     except Exception as exc:
         stats["total_errors"] = int(stats.get("total_errors", 0) or 0) + 1
         error_logs.append({"error": str(exc), "time": datetime.now().isoformat()})
-        logger.error("WS error [%s]: %s", conn_id, exc)
+        logger.error("%s error [%s]: %s", transport, conn_id, exc)
     finally:
         if writer is not None:
             try:
@@ -1024,4 +1164,67 @@ async def websocket_tunnel(ws: WebSocket, uuid: str):
             except Exception:
                 pass
         connections.pop(conn_id, None)
-        logger.info("WS closed [%s] total=%d", conn_id, len(connections))
+        logger.info("%s closed [%s] total=%d", transport, conn_id, len(connections))
+
+
+async def websocket_tunnel(ws: WebSocket, uuid: str):
+    """Existing WebSocket entry point, now a thin adapter around the same core."""
+    early = _early_data(ws)
+    await ws.accept()
+    _tune_client_socket(ws)
+    await _run_vless_session(
+        _WSIO(ws),
+        uuid,
+        client_ip=_ws_client_ip(ws),
+        location_id=_loc_param(ws),
+        transport="vless-ws-hyper",
+        early=early,
+    )
+
+
+async def raw_tcp_tunnel(
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    *,
+    client_ip: str,
+    location_id: str,
+    server_name: str,
+):
+    """Standard VLESS v0 over an already negotiated TLS Raw TCP stream."""
+    io = _RawIO(reader, writer)
+    header_started = time.monotonic()
+    try:
+        _command, address, port, payload, header_bytes, uuid = await _collect_header(
+            io, b"", prefetch_payload=False, include_uuid=True
+        )
+        io.finish_header()
+        stats["raw_tcp_vless_headers"] = int(
+            stats.get("raw_tcp_vless_headers", 0) or 0
+        ) + 1
+        stats["raw_tcp_vless_header_ms_total"] = float(
+            stats.get("raw_tcp_vless_header_ms_total", 0.0) or 0.0
+        ) + (time.monotonic() - header_started) * 1000
+        await _run_vless_session(
+            io,
+            uuid,
+            client_ip=client_ip,
+            location_id=location_id,
+            transport="vless-raw-tcp",
+            prepared_header=(_command, address, port, payload, header_bytes),
+            allow_client_half_close=True,
+            write_high_water=RAW_WRITE_HIGH,
+            write_max_high_water=RAW_WRITE_HIGH,
+        )
+    except (asyncio.TimeoutError, ConnectionError, ValueError):
+        stats["total_errors"] = int(stats.get("total_errors", 0) or 0) + 1
+        stats["raw_tcp_handshake_rejected"] = int(
+            stats.get("raw_tcp_handshake_rejected", 0) or 0
+        ) + 1
+        error_logs.append(
+            {"error": "raw tcp handshake rejected", "time": datetime.now().isoformat()}
+        )
+    finally:
+        try:
+            await io.flush()
+        except Exception:
+            pass

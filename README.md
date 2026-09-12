@@ -7,6 +7,7 @@
 ## ✨ ویژگی‌ها
 
 * 🔌 تونل VLESS روی **WebSocket Turbo** با مسیر کم‌کپی و صف‌بندی Burst
+* 🔌 ورودی اختیاری **VLESS Raw TCP روی TLS** با Listener مستقل؛ فقط بعد از آماده‌سازی و تأیید TCP Proxy در Railway
 * 🌐 HTTP Proxy داخلی
 * 📊 داشبورد مدیریتی کامل (آمار، نمودار ترافیک ساعتی، اتصالات زنده، لاگ فعالیت‌ها و خطاها)
 * 🔗 مدیریت لینک‌های نامحدود با محدودیت ترافیک اختصاصی (KB/MB/GB)
@@ -54,7 +55,7 @@
 
 هنگام ساخت یا ویرایش هر کانفیگ می‌توانید این موارد را جداگانه تنظیم کنید:
 
-* **پروتکل/ترابرد**: فقط `vless-ws` (VLESS روی WebSocket Turbo)
+* **پروتکل/ترابرد**: `vless-ws` همیشه در دسترس است. `vless-tcp` (VLESS Raw TCP) فقط وقتی TCP Proxy، TLS و SNI mappingِ همین استقرار تأیید شده باشند در پنل قابل انتخاب می‌شود.
 * **Remark کلاینت**: نام دقیق بعد از `#` در لینک VLESS که داخل برنامه کاربر نمایش داده می‌شود؛ مستقل از Label داخلی پنل
 * **Fingerprint (uTLS)**: مقادیر chrome / firefox / safari / ios / android / edge / 360 / qq / random / randomized
 * **ALPN**: پیش‌فرض پروتکل، یا مقدار دستی مثل `h2,http/1.1` یا `http/1.1`
@@ -143,7 +144,40 @@ VLESS_SNI_NAMES=app.example.com, front.example.org
 2. برای هر لوکیشن، کشور را از لیست مخزن انتخاب کنید و پروکسی‌های همان کشور را تیک بزنید.
 3. لوکیشن‌ها را مرتب کنید (اولین لوکیشن پیش‌فرض است) و ذخیره کنید.
 
-نتیجه: لینک اشتراک گروه برای هر لوکیشن یک ورودی جدا می‌سازد (مثل `Germany 🇩🇪 | My Server`) ولی **همه ورودی‌ها همان UUID و سهمیه‌ی کانفیگ را دارند**؛ سهمیه با تعویض لوکیشن ریست یا چندبرابر نمی‌شود. کلاینت با انتخاب ورودی، لوکیشن خروجی را عوض می‌کند. اگر پروکسی‌های یک لوکیشن ناسالم شوند، لوکیشن‌های فعال بعدی به‌صورت خودکار جایگزین می‌شوند و اتصال هرگز به مسیر مستقیم سرور برنمی‌گردد.
+نتیجه: لینک اشتراک گروه برای هر لوکیشن یک ورودی جدا می‌سازد (مثل `Germany 🇩🇪 | My Server`) ولی **همه ورودی‌ها همان UUID و سهمیه‌ی کانفیگ را دارند**؛ سهمیه با تعویض لوکیشن ریست یا چندبرابر نمی‌شود. کلاینت با انتخاب ورودی، لوکیشن خروجی را صریح انتخاب می‌کند. اگر پروکسی انتخاب‌شده‌ی همان لوکیشن ناسالم شود، اتصال **fail-closed** می‌شود؛ سیستم به کشور، پروکسی یا مسیر مستقیم دیگری سوئیچ نمی‌کند.
+
+## 🔐 Raw TCP در Railway (اختیاری و Deployment-gated)
+
+Raw TCP هیچ‌وقت به‌صورت خودکار فعال یا جایگزین WebSocket نمی‌شود. مسیر آن مستقل است:
+
+```text
+Client → Railway TCP Proxy → TLS listener in this process → VLESS Raw/TCP
+       → existing exact proxy resolver → one selected outbound proxy → destination
+```
+
+پیش از فعال‌کردن آن در **Staging**، اپراتور باید همه‌ی موارد زیر را آماده و end-to-end تأیید کند:
+
+1. یک Railway TCP Proxy جدا که ترافیک TCP عمومی را به پورت داخلی listener هدایت کند. Public HTTPS/WebSocket سرویس بدون تغییر باقی می‌ماند.
+2. TLS در خود برنامه: کلید و certificate را فقط از Volume/secret mount فراهم کنید؛ هرگز آن‌ها را commit یا در محیط مرورگر/لاگ قرار ندهید. گواهی باید تمام hostnameهای SNI زیر را در SAN داشته باشد.
+3. مقدارهای زیر را در Runtime تنظیم کنید. `RAILWAY_TCP_PROXY_DOMAIN` و `RAILWAY_TCP_PROXY_PORT` همان مقصد عمومی TCP Proxy هستند؛ پورت application و listener باید برابر باشند:
+
+```env
+RAILWAY_TCP_APPLICATION_PORT=7000
+VLESS_TCP_LISTEN_PORT=7000
+VLESS_TCP_LISTEN_HOST=0.0.0.0
+RAILWAY_TCP_PROXY_DOMAIN=tcp.example.com
+RAILWAY_TCP_PROXY_PORT=443
+VLESS_TCP_TLS_CERT_FILE=/mounted-secrets/tcp-fullchain.pem
+VLESS_TCP_TLS_KEY_FILE=/mounted-secrets/tcp-privkey.pem
+VLESS_TCP_URI_NETWORK=raw
+VLESS_TCP_DEFAULT_SNI=tcp.example.com
+VLESS_TCP_SNI_MAP={"tcp.example.com":"","de.tcp.example.com":"loc-de","fr.tcp.example.com":"loc-fr"}
+VLESS_TCP_MAX_CONNECTIONS=128
+```
+
+`VLESS_TCP_URI_NETWORK` عمداً باید توسط اپراتور پس از آزمون کلاینت‌های موردنظر روی `raw` یا `tcp` تعیین شود؛ برنامه نام‌گذاری URI را حدس نمی‌زند. مقدار خالی در map، endpoint عادی را مشخص می‌کند. در Multi-Location هر location ID دقیقاً به یک SNI hostname نیاز دارد؛ SNI ناشناخته یا mapping ناقص fail-closed می‌شود و location یا proxy جایگزین نمی‌گردد.
+
+تا وقتی listener با این قرارداد به‌طور موفق بالا نیاید، پنل `Raw TCP unavailable` نشان می‌دهد و API ساخت کانفیگ TCP را رد می‌کند. ابتدا در Staging با TLS معتبر، SNI درست/نادرست، هر دو location، proxy مرده و بازگشت پس از بازیابی proxy تست کنید. به‌دلیل state فایل JSON، Raw TCP deployment باید تا زمان استفاده از state مشترکِ آزموده‌شده، تک‌replica بماند. همچنین اگر برای محدودیت IP به آدرس واقعی کلاینت نیاز دارید، رفتار source IP TCP Proxy را در Staging بررسی کنید؛ Raw TCP مانند HTTP هدر `X-Forwarded-For` ندارد.
 
 ## 🤖 بات فروش تلگرام
 
@@ -172,6 +206,14 @@ VLESS_SNI_NAMES=app.example.com, front.example.org
 | `RAILWAY_PUBLIC_DOMAIN` | دامنه عمومی سرویس؛ به‌صورت خودکار توسط Railway تنظیم می‌شود | `localhost` |
 | `VLESS_ADDRESSES` | گزینه‌های Address اضافه برای فرم ساخت کانفیگ؛ IPv4/IPv6/دامنه با کاما، فاصله، سمی‌کالن یا خط جدید | — |
 | `VLESS_SNI_NAMES` | گزینه‌های دامنه SNI اضافه؛ با کاما، فاصله، سمی‌کالن یا خط جدید | — |
+| `RAILWAY_TCP_APPLICATION_PORT` | پورت داخلی مقصد Railway TCP Proxy؛ باید با `VLESS_TCP_LISTEN_PORT` برابر باشد | — |
+| `RAILWAY_TCP_PROXY_DOMAIN` | hostname عمومی Railway TCP Proxy برای URIهای Raw TCP | — |
+| `RAILWAY_TCP_PROXY_PORT` | پورت عمومی Railway TCP Proxy برای URIهای Raw TCP | — |
+| `VLESS_TCP_LISTEN_HOST` / `VLESS_TCP_LISTEN_PORT` | bind جداگانه‌ی listener Raw TCP | `0.0.0.0` / — |
+| `VLESS_TCP_TLS_CERT_FILE` / `VLESS_TCP_TLS_KEY_FILE` | مسیرهای محافظت‌شده‌ی certificate/key برای TLS در برنامه | — |
+| `VLESS_TCP_URI_NETWORK` | spelling تأییدشده توسط کلاینت برای URI: فقط `raw` یا `tcp` | — |
+| `VLESS_TCP_DEFAULT_SNI` / `VLESS_TCP_SNI_MAP` | SNI معمول و map صریح hostname به location ID | — |
+| `VLESS_TCP_MAX_CONNECTIONS` | سقف concurrent Raw TCP sessions؛ 1 تا 1024 | `128` |
 | `GO2SOCKS5` | میزبان‌های اجباری پروکسی، مثل `*.ip111.cn,*google.com` | — |
 | `PROXY_REPOSITORY_MANUAL_REFRESH_KEY` | کلید تصادفی برای فعال‌شدن دکمه بررسی دستی؛ نصاب خودکار می‌سازد | — |
 | `LUMEN_S3_ACCESS_KEY_ID` | کلید Access مخزن پروکسی (ترجیحاً به‌جای ویرایش سورس) | — |

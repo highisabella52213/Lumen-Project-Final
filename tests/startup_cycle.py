@@ -50,7 +50,7 @@ try:
     assert sys.modules.get('main') is module
     assert module.RELAY_BUF > 0
     assert Server.ran
-    assert module.PROTOCOLS == ('vless-ws',)
+    assert module.PROTOCOLS == ('vless-ws', 'vless-tcp')
 
     # Address, WebSocket Host, and TLS SNI are independent.
     from urllib.parse import urlsplit, parse_qs, unquote
@@ -76,6 +76,6 @@ try:
 
     remark_link = module.vless_link_for_link({"label":"Internal label","remark":"Visible client remark","protocol":"vless-ws"}, uid, "app.example.com")
     assert unquote(urlsplit(remark_link).fragment) == "Visible client remark"
-    print(f"python-main startup: alias=True RELAY_BUF={module.RELAY_BUF} protocols=ws-only endpoints=domain+ipv4+ipv6 remark=exact server.run=True OK")
+    print(f"python-main startup: alias=True RELAY_BUF={module.RELAY_BUF} protocols=ws+deployment-gated-tcp endpoints=domain+ipv4+ipv6 remark=exact server.run=True OK")
 finally:
     if old_main is not None: sys.modules['__main__']=old_main

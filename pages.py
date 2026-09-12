@@ -1095,7 +1095,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;ba
 .fi,.fs,.cp-input-full,.modal-v2-input,.subs-search input,.ob-field input,.ob-field select,.ob-field textarea{min-height:52px;border:1px solid var(--md-sys-color-outline)!important;border-radius:var(--md-sys-shape-corner-small)!important;background:var(--md-sys-color-surface-container-lowest)!important;color:var(--md-sys-color-on-surface)!important;padding:13px 15px;outline:0;transition:border-color var(--md-sys-motion-duration-short),box-shadow var(--md-sys-motion-duration-short),background var(--md-sys-motion-duration-short)}
 .fi:focus,.fs:focus,.cp-input-full:focus,.modal-v2-input:focus,.subs-search input:focus,.ob-field input:focus,.ob-field select:focus,.ob-field textarea:focus{border-color:var(--md-sys-color-primary)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--md-sys-color-primary) 22%,transparent);background:var(--md-sys-color-surface-container-low)!important}.chip{min-height:36px;display:inline-flex;align-items:center;padding:0 14px;background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface-variant);border:0}.chip.active{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
 .endpoint-studio{padding:0;overflow:hidden;background:var(--md-sys-color-surface-container)}.endpoint-studio-head{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 22px;border-bottom:1px solid var(--md-sys-color-outline-variant)}.endpoint-studio-sub{font-size:.77rem;color:var(--md-sys-color-on-surface-variant);margin-top:3px}.endpoint-status{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);font-size:.72rem;white-space:nowrap}.endpoint-status.custom{background:var(--md-sys-color-tertiary-container);color:var(--md-sys-color-on-tertiary-container)}.endpoint-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px 22px}.endpoint-field{padding:18px;background:var(--md-sys-color-surface-container-low);border-radius:var(--md-sys-shape-corner-large-increased)}.endpoint-field>label{display:flex;align-items:center;gap:8px;font-weight:720;margin-bottom:10px}.step-dot{width:26px;height:26px;display:grid;place-items:center;border-radius:50%;background:var(--md-sys-color-primary);color:var(--md-sys-color-on-primary);font-size:.72rem}.endpoint-custom{animation:md-field-in 260ms var(--md-sys-motion-easing-emphasized-decelerate)}@keyframes md-field-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}.endpoint-help{font-size:.72rem;line-height:1.55;color:var(--md-sys-color-on-surface-variant);margin-top:8px}.endpoint-help code{color:var(--md-sys-color-primary)}.endpoint-ltr{direction:ltr;text-align:left;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.endpoint-preview{display:flex;align-items:center;justify-content:center;gap:18px;padding:16px 22px;background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface)}.endpoint-preview>div{display:flex;align-items:center;gap:10px;min-width:0}.endpoint-preview span{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--md-sys-color-on-surface-variant)}.endpoint-preview code{font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--md-sys-color-primary)}.endpoint-preview>i{color:var(--md-sys-color-tertiary)}
-.proto-card{min-height:112px;border:0!important;border-radius:var(--md-sys-shape-corner-extra-large)!important;background:var(--md-sys-color-secondary-container)!important;color:var(--md-sys-color-on-secondary-container)!important}.proto-card.active{box-shadow:inset 0 0 0 2px var(--md-sys-color-secondary)}.proto-card-icon{background:var(--md-sys-color-primary-container)!important;color:var(--md-sys-color-on-primary-container)!important}
+.proto-card{min-height:112px;border:0!important;border-radius:var(--md-sys-shape-corner-extra-large)!important;background:var(--md-sys-color-secondary-container)!important;color:var(--md-sys-color-on-secondary-container)!important;font:inherit}.proto-card.active{box-shadow:inset 0 0 0 2px var(--md-sys-color-secondary)}.proto-card-icon{background:var(--md-sys-color-primary-container)!important;color:var(--md-sys-color-on-primary-container)!important}.proto-card[aria-disabled="true"]{cursor:not-allowed;opacity:.82;background:var(--md-sys-color-surface-container-highest)!important;color:var(--md-sys-color-on-surface-variant)!important}.proto-card[aria-disabled="true"]:hover{transform:none;filter:none;border-color:transparent}.proto-card[aria-disabled="true"] .proto-card-icon{background:var(--md-sys-color-surface-container)!important;color:var(--md-sys-color-on-surface-variant)!important}.proto-card[aria-disabled="true"] .proto-card-check{display:none}.transport-runtime-note{display:flex;align-items:flex-start;gap:10px;margin:12px 2px 0;padding:12px 14px;border-radius:var(--md-sys-shape-corner-medium);background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);font:var(--md-sys-typescale-body-small-font);font-size:.76rem;line-height:1.5}.transport-runtime-note i{margin-top:1px;color:var(--md-sys-color-secondary);font-size:1rem}.transport-runtime-note.unavailable{background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface-variant)}.transport-runtime-note.unavailable i{color:var(--md-sys-color-outline)}
 .cfg-grid{gap:16px}.cfg-card{border:1px solid var(--md-sys-color-outline-variant);border-radius:var(--md-sys-shape-corner-extra-large);background:var(--md-sys-color-surface-container-low);overflow:hidden;transition:transform var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-emphasized),border-color var(--md-sys-motion-duration-short),box-shadow var(--md-sys-motion-duration-medium)}.cfg-card:hover{transform:translateY(-4px);border-color:var(--md-sys-color-outline);box-shadow:var(--shadow)}.cfg-row{padding:20px}.cfg-status-dot{width:10px;height:10px;background:var(--green);box-shadow:0 0 0 5px color-mix(in srgb,var(--green) 16%,transparent)}.cfg-uuid-mini{background:var(--md-sys-color-surface-container-high);border-radius:var(--md-sys-shape-corner-full);padding:4px 9px}.cfg-badges-col{align-items:flex-start;max-width:250px}.cfg-sub-tag{padding:4px 9px;background:var(--md-sys-color-surface-container-high);color:var(--md-sys-color-on-surface-variant);max-width:240px;overflow:hidden;text-overflow:ellipsis}.cfg-sub-tag i{color:var(--md-sys-color-tertiary)}.endpoint-tag{font-family:ui-monospace,SFMono-Regular,monospace}.tog{width:32px;height:52px;background:var(--md-sys-color-surface-container-highest)}.tog::after{width:22px;height:22px;left:5px;top:5px;background:var(--md-sys-color-outline)}.tog.on{background:var(--md-sys-color-primary)}.tog.on::after{top:25px;background:var(--md-sys-color-on-primary)}
 .modal-bg{background:color-mix(in srgb,var(--md-sys-color-surface) 56%,transparent);backdrop-filter:blur(12px)}.modal,.modal-v2,.lmodal{border:1px solid var(--md-sys-color-outline-variant);border-radius:var(--md-sys-shape-corner-extra-large-increased);background:var(--md-sys-color-surface-container-high);box-shadow:0 28px 80px rgba(4,6,14,.38);animation:md-dialog-in 380ms var(--md-sys-motion-easing-emphasized-decelerate)}@keyframes md-dialog-in{from{opacity:0;transform:translateY(24px) scale(.94)}to{opacity:1;transform:none}}.modal-close,.modal-v2-close,.sb-close{width:48px;height:48px;border-radius:var(--md-sys-shape-corner-full);background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);border:0}
 .toast{min-height:52px;padding:14px 18px;border-radius:var(--md-sys-shape-corner-small);background:var(--md-sys-color-inverse-surface);color:var(--md-sys-color-inverse-on-surface);box-shadow:var(--shadow)}
@@ -1455,17 +1455,42 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         </div>
       </div>
       <div class="cp-block mb16">
-        <div class="cp-block-label"><i class="ti ti-plug-connected"></i> Transport protocol</div>
+        <div class="cp-block-label"><i class="ti ti-plug-connected"></i> Transport</div>
         <select id="nl-proto" style="display: none">
           <option value="vless-ws">VLESS / WebSocket Turbo</option>
+          <option value="vless-tcp">VLESS / Raw TCP</option>
         </select>
-        <div class="proto-cards">
-          <div class="proto-card active" data-val="vless-ws" onclick="selectProto('vless-ws',this)">
-            <div class="proto-card-check"><i class="ti ti-check"></i></div>
-            <div class="proto-card-icon"><i class="ti ti-link"></i></div>
-            <div class="proto-card-title">VLESS / WS</div>
-            <div class="proto-card-desc">Turbo · zero-copy · maximum throughput</div>
-          </div>
+        <div class="proto-cards" id="transport-cards" aria-label="Transport choices">
+          <button type="button" class="proto-card active" data-val="vless-ws" aria-pressed="true" onclick="selectProto('vless-ws',this)">
+            <span class="proto-card-check"><i class="ti ti-check"></i></span>
+            <span class="proto-card-icon"><i class="ti ti-link"></i></span>
+            <span class="proto-card-title">VLESS / WS</span>
+            <span class="proto-card-desc">Native Turbo relay · available</span>
+          </button>
+          <button type="button" class="proto-card" data-val="vless-tcp" aria-disabled="true" aria-describedby="transport-runtime-note" disabled onclick="selectProto('vless-tcp',this)">
+            <span class="proto-card-check"><i class="ti ti-check"></i></span>
+            <span class="proto-card-icon"><i class="ti ti-plug-connected"></i></span>
+            <span class="proto-card-title">VLESS / TCP</span>
+            <span class="proto-card-desc">Checking TCP ingress…</span>
+          </button>
+          <button type="button" class="proto-card" data-val="vless-grpc" aria-disabled="true" aria-describedby="transport-runtime-note" disabled>
+            <span class="proto-card-icon"><i class="ti ti-brand-google"></i></span>
+            <span class="proto-card-title">gRPC</span>
+            <span class="proto-card-desc">Checking installed runtime…</span>
+          </button>
+          <button type="button" class="proto-card" data-val="vless-kcp" aria-disabled="true" aria-describedby="transport-runtime-note" disabled>
+            <span class="proto-card-icon"><i class="ti ti-wave-sine"></i></span>
+            <span class="proto-card-title">KCP</span>
+            <span class="proto-card-desc">Checking installed runtime…</span>
+          </button>
+          <button type="button" class="proto-card" data-val="vless-httpupgrade" aria-disabled="true" aria-describedby="transport-runtime-note" disabled>
+            <span class="proto-card-icon"><i class="ti ti-arrows-exchange"></i></span>
+            <span class="proto-card-title">HTTPUpgrade</span>
+            <span class="proto-card-desc">Checking installed runtime…</span>
+          </button>
+        </div>
+        <div class="transport-runtime-note unavailable" id="transport-runtime-note" role="status">
+          <i class="ti ti-info-circle"></i><span>Only transports verified by this server’s runtime can be selected.</span>
         </div>
       </div>
       <div class="cp-block endpoint-studio mb16" id="endpoint-studio">
@@ -2532,10 +2557,65 @@ function setExpiry(days,el){
   document.querySelectorAll('#exp-chips .chip').forEach(c=>c.classList.remove('active'));
   el.classList.add('active');
 }
+let transportCapabilities=Object.create(null);
+function setTransportRuntimeNote(capability){
+  const note=document.getElementById('transport-runtime-note');
+  if(!note)return;
+  const available=Boolean(capability?.available);
+  note.className='transport-runtime-note'+(available?'':' unavailable');
+  const text=available
+    ? `${capability.label} is verified by the installed runtime.`
+    : (capability?.detail||'This transport is not available in the installed runtime.');
+  note.innerHTML=`<i class="ti ${available?'ti-circle-check':'ti-info-circle'}"></i><span>${esc(text)}</span>`;
+}
+function renderTransportCapabilities(rows){
+  transportCapabilities=Object.fromEntries((rows||[]).map(item=>[item.id,item]));
+  document.querySelectorAll('.proto-card[data-val]').forEach(card=>{
+    const capability=transportCapabilities[card.dataset.val];
+    const available=Boolean(capability?.available);
+    card.disabled=!available;
+    card.setAttribute('aria-disabled',String(!available));
+    card.setAttribute('aria-pressed',String(available&&card.dataset.val===document.getElementById('nl-proto').value));
+    card.title=available?'':(capability?.status||'NOT SUPPORTED BY CURRENT RUNTIME');
+    const description=card.querySelector('.proto-card-desc');
+    if(description)description.textContent=available
+      ? (capability.description||'Available')
+      : (capability?.status||'NOT SUPPORTED BY CURRENT RUNTIME');
+  });
+  syncTransportFields(document.getElementById('nl-proto').value);
+  setTransportRuntimeNote(transportCapabilities[document.getElementById('nl-proto').value]);
+}
+async function loadTransportCapabilities(){
+  try{
+    const r=await authF('/api/transports');
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.detail||'Could not load transport capabilities');
+    renderTransportCapabilities(data.transports);
+  }catch(error){
+    console.error(error);
+    setTransportRuntimeNote(null);
+  }
+}
 function selectProto(val,el){
-  document.getElementById('nl-proto').value = val;
-  document.querySelectorAll('.proto-card').forEach(c=>c.classList.remove('active'));
-  el.classList.add('active');
+  const capability=transportCapabilities[val];
+  if(!capability||!capability.available){
+    setTransportRuntimeNote(capability);
+    toast(capability?.status||'Transport unavailable in the installed runtime','err');
+    return;
+  }
+  document.getElementById('nl-proto').value=val;
+  syncTransportFields(val);
+  document.querySelectorAll('.proto-card[data-val]').forEach(card=>{
+    const active=card===el;
+    card.classList.toggle('active',active);
+    card.setAttribute('aria-pressed',String(active));
+  });
+  setTransportRuntimeNote(capability);
+}
+function syncTransportFields(protocol){
+  const raw=protocol==='vless-tcp';
+  const studio=document.getElementById('endpoint-studio');
+  if(studio){studio.hidden=raw;studio.setAttribute('aria-hidden',String(raw));}
 }
 function setIpLimit(n,el){
   document.getElementById('nl-iplimit').value = n;
@@ -2750,11 +2830,13 @@ async function createLink(){
   const ip_limit=Number(document.getElementById('nl-iplimit').value)||0;
   const speed_limit_value=Number(document.getElementById('nl-speed').value)||0;
   const speed_limit_unit=document.getElementById('nl-speed-unit').value;
-  const {address,sni}=selectedCreateEndpoints();
+  const endpoint=protocol==='vless-tcp'?null:selectedCreateEndpoints();
   const {exit_proxy_mode,proxy_id,custom_proxy,proxy_test_receipt}=exitProxyValues('nl');
   if(exit_proxy_mode==='repository'&&(!proxy_id||!proxy_test_receipt)){toast('Test the exact selected proxy before saving','err');return}
   try{
-    const r=await authF('/api/links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label,remark,limit_value:val||0,limit_unit:unit,expires_days:exp||0,note,sub_id,protocol,fingerprint,alpn,port,ip_limit,speed_limit_value,speed_limit_unit,address,sni,exit_proxy_mode,proxy_id,custom_proxy,proxy_test_receipt,uuid})});
+    const payload={label,remark,limit_value:val||0,limit_unit:unit,expires_days:exp||0,note,sub_id,protocol,fingerprint,ip_limit,speed_limit_value,speed_limit_unit,exit_proxy_mode,proxy_id,custom_proxy,proxy_test_receipt,uuid};
+    if(endpoint)Object.assign(payload,{alpn,port,address:endpoint.address,sni:endpoint.sni});
+    const r=await authF('/api/links',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.detail||'Could not create config');
     ['nl-label','nl-remark','nl-val','nl-exp','nl-note','nl-uuid','nl-alpn'].forEach(id=>document.getElementById(id).value='');
@@ -3286,7 +3368,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   initCharts();
   document.getElementById('set-host').textContent=location.host;
   document.getElementById('sub-all-url')&&(document.getElementById('sub-all-url').textContent=location.protocol+'//'+location.host+'/sub-all');
-  fetchStats();fetchDefaultVless();loadEndpointChoices();loadProxyCatalog();loadLinks();loadSubs();loadUpdateStatus();
+  fetchStats();fetchDefaultVless();loadEndpointChoices();loadTransportCapabilities();loadProxyCatalog();loadLinks();loadSubs();loadUpdateStatus();
   window.__codeDashboardPollers?.forEach(stop=>stop());window.__codeDashboardPollers=[];
   window.__codeDashboardPollers.push(startSerializedPoller(fetchStats,4000,'stats'));
   window.__codeDashboardPollers.push(startSerializedPoller(loadUpdateStatus,15*60*1000,'updater'));

@@ -34,7 +34,7 @@ checks={
 'complete Railway folder':sorted(p.name for p in (root/'railway-installer').iterdir())==['Dockerfile','README.md','package.json','railway.json','server.js'],
 'Cloudflare installer removed':not (root/'cloudflare-installer').exists() and 'Cloudflare' not in installer,
 'Vazirmatn':all(x in installer for x in ['Vazirmatn','fonts.googleapis.com','fonts.gstatic.com']),
-'v28 brand':all(x in text+main+installer+updater for x in ['Command Console · v28','Version 28.0','WS-only v28','28.0.0']),
+'v28 brand + capability-gated transport':all(x in text+main+installer+updater for x in ['Command Console · v28','Version 28.0','Raw TCP','28.0.0']),
 'durable state':all(x in main for x in ['code_state.backup-1.json','LUMEN_STATE_SNAPSHOT_B64','os.fsync','refusing to start and overwrite']),
 }
 fail=[k for k,v in checks.items() if not v]

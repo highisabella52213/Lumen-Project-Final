@@ -144,7 +144,7 @@ async def run():
 
     # 1) proxied route reaches the destination through the proxy
     payload = b"PING-THROUGH-PROXY"
-    async with websockets.connect(f"ws://127.0.0.1:8899/ws/{uid_ok}", max_size=2**22) as ws:
+    async with websockets.connect(f"ws://127.0.0.1:8899/ws/{uid_ok}?loc=loc-de", max_size=2**22) as ws:
         await ws.send(vless_header(uid_ok, APP, dest_port) + payload)
         data = await read_vless_response(ws, BANNER)
         assert data == BANNER, f"expected banner, got {data!r}"
@@ -156,7 +156,7 @@ async def run():
     # 2) non-TLS payload through the proxy (the old code sent this DIRECT)
     dest_hits.clear(); connect_log.clear()
     plain = b"DNS-OVER-TCP-STYLE-PAYLOAD"
-    async with websockets.connect(f"ws://127.0.0.1:8899/ws/{uid_ok}", max_size=2**22) as ws:
+    async with websockets.connect(f"ws://127.0.0.1:8899/ws/{uid_ok}?loc=loc-de", max_size=2**22) as ws:
         await ws.send(vless_header(uid_ok, APP, dest_port) + plain)
         data = await read_vless_response(ws, BANNER)
         assert data == BANNER

@@ -35,6 +35,8 @@ import logging
 import countries
 import outbound
 import proxy_repository
+from transports import TRANSPORTS
+from raw_tcp import RAW_TCP_LISTENER
 from config_address import (
     address_kind,
     authority_host,
@@ -285,13 +287,32 @@ async def load_state():
     LINKS.clear(); SUBS.clear(); PROXY_TEST_RESULTS.clear()
     LINKS.update(loaded.get("links", {}))
     for _link in LINKS.values():
-        _link["protocol"] = DEFAULT_PROTOCOL
+        # Pre-registry configurations are VLESS/WS and did not carry a
+        # transport_settings key. Preserve any other persisted transport value
+        # instead of silently downgrading it; invalid/unavailable records fail
+        # closed through is_link_allowed().
+        _stored_protocol = str(_link.get("protocol") or DEFAULT_PROTOCOL).strip()
+        _stored_settings = _link.get("transport_settings")
+        try:
+            _link["protocol"], _link["transport_settings"] = TRANSPORTS.validate(
+                _stored_protocol, _stored_settings
+            )
+        except ValueError:
+            _link["protocol"] = _stored_protocol
+            _link["transport_settings"] = (
+                _stored_settings if isinstance(_stored_settings, dict) else {}
+            )
         _link.setdefault("address", "")
         _link.setdefault("sni", "")
         _link.setdefault("remark", _link.get("label") or "Lumen Relay")
         _link.pop("proxy"+"ip", None); _link.pop("proxy"+"ip_enabled", None); _link.pop("proxy"+"ip_concurrency", None); _link.pop("outbound", None)
         _link.setdefault("exit_proxy_mode", "direct"); _link.setdefault("proxy_id", ""); _link.setdefault("custom_proxy", "")
-        if not _link.get("alpn") or "h2" in str(_link.get("alpn")):
+        if _link.get("protocol") == "vless-tcp":
+            # TCP ingress owns its TLS/ALPN contract.  Do not resurrect the
+            # historical WebSocket HTTP/1.1 default after a persistence
+            # round-trip.
+            _link["alpn"] = ""
+        elif not _link.get("alpn") or "h2" in str(_link.get("alpn")):
             _link["alpn"] = "http/1.1"
     SUBS.update(loaded.get("subs", {}))
     raw_proxy_tests = loaded.get("proxy_test_results", {})
@@ -368,7 +389,7 @@ PROXY_TEST_RESULTS: dict[str, dict] = {}
 PROXY_TEST_RESULTS_LOCK = asyncio.Lock()
 
 # پ��وتکل‌های پشتیبانی‌شده برای هر ��انفیگ
-PROTOCOLS = ("vless-ws",)
+PROTOCOLS = ("vless-ws", "vless-tcp")
 DEFAULT_PROTOCOL = "vless-ws"
 
 # Fingerprint (uTLS) های قابل انتخاب برای هر کانفیگ
@@ -378,6 +399,7 @@ DEFAULT_FINGERPRINT = "chrome"
 # پیش‌فرض ALPN بر اساس نوع ترابرد (اگر کاربر مقدار دستی نده)
 DEFAULT_ALPN_BY_PROTOCOL = {
     "vless-ws": "http/1.1",
+    "vless-tcp": "",
 }
 
 DEFAULT_PORT = 443
@@ -452,11 +474,17 @@ async def startup():
     proxy_repository.kick_refresh(force=True)
     proxy_repository.start_periodic_refresh()
     await _tg_start_bot()
+    await RAW_TCP_LISTENER.start()
+    if RAW_TCP_LISTENER.running:
+        logger.info("Raw TCP TLS listener started separately from Uvicorn")
+    elif RAW_TCP_LISTENER.error:
+        logger.info("%s", RAW_TCP_LISTENER.error)
     log_activity("system", "سرور راه‌اندازی شد", "ok")
-    logger.info(f"Lumen Relay WS-only v28 started on port {CONFIG['port']}")
+    logger.info(f"Lumen Relay started on HTTP/WebSocket port {CONFIG['port']}")
 
 @app.on_event("shutdown")
 async def shutdown():
+    await RAW_TCP_LISTENER.stop()
     await save_state()
     await proxy_repository.stop_periodic_refresh()
     await _tg_stop_bot()
@@ -482,7 +510,7 @@ def get_host(request: Request | None = None) -> str:
     return os.environ.get("RAILWAY_PUBLIC_DOMAIN", CONFIG["host"])
 
 
-BUILTIN_VLESS_ADDRESSES = ("railway.com", "69.46.46.18", "69.46.46.126")
+BUILTIN_VLESS_ADDRESSES = ("railway.com", "69.46.46.18", "69.46.46.126" , "69.46.46.188" , "69.46.46.46" , "69.46.46.172")
 
 PROXY_TEST_RECEIPT_TTL = 10 * 60
 
@@ -581,9 +609,10 @@ def generate_vless_link(
     address: str | None = None,
     sni: str | None = None,
     loc: str | None = None,
+    transport_settings: object = None,
 ) -> str:
-    """لینک VLESS-over-WebSocket سریع و سازگار با Xray را می‌سازد.
-    fingerprint / alpn / port در صورت ندادن از پیش‌فرض WS استفاده می‌شوند."""
+    """Generate a URI only for a transport integrated with this native relay."""
+    protocol, transport_settings = TRANSPORTS.validate(protocol, transport_settings)
     fp = (fingerprint or DEFAULT_FINGERPRINT).strip() or DEFAULT_FINGERPRINT
     if fp not in FINGERPRINTS:
         fp = DEFAULT_FINGERPRINT
@@ -592,30 +621,43 @@ def generate_vless_link(
     if not (MIN_PORT <= port_val <= MAX_PORT):
         port_val = DEFAULT_PORT
 
-    # Address, TLS SNI, and WebSocket Host are three independent values.
-    # Changing SNI must never rewrite the transport Host header.
-    dial_address, tls_name = link_hosts(address, sni, host)
-    try:
-        transport_host = normalize_address(host)
-    except ValueError:
-        transport_host = str(host or "").strip()
-    path = f"/ws/{uuid}?ed=4096"
-    if loc:
-        # Multi-Location: the client picks the exit location; the UUID, quota
-        # and identity stay the same on every location entry.
-        safe_loc = "".join(ch for ch in str(loc) if ch.isalnum() or ch in "-_")[:24]
-        if safe_loc:
-            path += f"&loc={safe_loc}"
+    raw_endpoint = TRANSPORTS.endpoint(
+        protocol,
+        address=address,
+        port=port,
+        sni=sni,
+        fallback_host=host,
+        location_id=loc,
+    )
+    if raw_endpoint is not None:
+        # Railway TCP Proxy public endpoint and the SNI location profile are
+        # deployment-owned.  Never reuse a WebSocket address, Host, or path.
+        dial_address, port_val, tls_name = raw_endpoint
+        transport_host = ""
+        alpn_val = ""
+    else:
+        # Address, TLS SNI, and WebSocket Host are three independent values.
+        # Changing SNI must never rewrite the transport Host header.
+        dial_address, tls_name = link_hosts(address, sni, host)
+        try:
+            transport_host = normalize_address(host)
+        except ValueError:
+            transport_host = str(host or "").strip()
     params = {
         "encryption": "none",
         "security": "tls",
-        "type": "ws",
-        "host": transport_host,
-        "path": path,
+        **TRANSPORTS.vless_parameters(
+            protocol,
+            uuid=uuid,
+            transport_host=transport_host,
+            location_id=loc,
+            settings=transport_settings,
+        ),
         "sni": tls_name,
         "fp": fp,
-        "alpn": alpn_val,
     }
+    if alpn_val:
+        params["alpn"] = alpn_val
     query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
     return f"vless://{uuid}@{authority_host(dial_address)}:{port_val}?{query}#{quote(remark)}"
 
@@ -629,6 +671,7 @@ def vless_entries_for_link(link: dict, uid: str, host: str) -> list:
         port=link.get("port"),
         address=link.get("address"),
         sni=link.get("sni"),
+        transport_settings=link.get("transport_settings"),
     )
     _sub, ml = multi_location_for_link(link)
     if ml is not None:
@@ -657,6 +700,21 @@ def vless_entries_for_link(link: dict, uid: str, host: str) -> list:
 def vless_link_for_link(link: dict, uid: str, host: str) -> str:
     """generate_vless_link رو با تنظیمات دستی همون کانفیگ (fingerprint/alpn/port) صدا می‌زنه."""
     return vless_entries_for_link(link, uid, host)[0]["vless_link"]
+
+
+def safe_vless_link_for_link(link: dict, uid: str, host: str) -> str:
+    """Do not make an admin listing unavailable when a gated ingress is off.
+
+    A persisted Raw TCP record remains intact across a deployment rollback, but
+    it must not receive a stale or guessed endpoint while the listener is
+    unavailable.  Subscription endpoints independently fail closed through
+    ``is_link_allowed``.
+    """
+    try:
+        return vless_link_for_link(link, uid, host)
+    except ValueError:
+        return ""
+
 
 def uptime() -> str:
     secs = int(time.time() - stats["start_time"])
@@ -698,6 +756,19 @@ def is_link_expired(link: dict) -> bool:
 def is_link_allowed(link: dict | None) -> bool:
     if link is None:
         return False
+    # A persisted route with a removed or unsupported transport must fail
+    # closed. Never rewrite it to WebSocket or return a misleading URI.
+    if not TRANSPORTS.is_available(link.get("protocol", DEFAULT_PROTOCOL)):
+        return False
+    # A Raw TCP Multi-Location subscription is usable only when each exact
+    # stored location has a deployment-owned SNI profile.  Do not emit a
+    # generic/default TCP endpoint and let the relay guess a location.
+    if link.get("protocol", DEFAULT_PROTOCOL) == "vless-tcp":
+        _sub, ml = multi_location_for_link(link)
+        try:
+            validate_raw_tcp_multi_location(link, ml)
+        except ValueError:
+            return False
     if not link.get("active", True):
         return False
     if is_link_expired(link):
@@ -765,6 +836,7 @@ async def ensure_default_link():
                     "is_default": True,
                     "sub_id": None,
                     "protocol": DEFAULT_PROTOCOL,
+                    "transport_settings": {},
                     "fingerprint": DEFAULT_FINGERPRINT,
                     "alpn": "",
                     "port": DEFAULT_PORT,
@@ -924,6 +996,25 @@ async def update_sub(sub_id: str, request: Request, _=Depends(require_auth)):
             if lid and lid in known and lid not in clean_ids:
                 clean_ids.append(lid)
         new_ids = clean_ids
+    # Validate the prospective association before mutating either side of the
+    # existing two-way link/subscription state.
+    if ml_value is not None or new_ids is not None:
+        existing_sub = SUBS.get(sub_id)
+        if existing_sub is None:
+            raise HTTPException(status_code=404, detail="sub not found")
+        prospective_ml = (
+            ml_value if ml_value is not None else existing_sub.get("multi_location")
+        )
+        prospective_ids = (
+            new_ids if new_ids is not None else existing_sub.get("link_ids", [])
+        )
+        async with LINKS_LOCK:
+            prospective_links = [LINKS.get(link_id) for link_id in prospective_ids]
+        try:
+            for link in prospective_links:
+                validate_raw_tcp_multi_location(link, prospective_ml)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     async with SUBS_LOCK:
         if sub_id not in SUBS:
             raise HTTPException(status_code=404, detail="sub not found")
@@ -995,6 +1086,17 @@ async def assign_link_to_sub(sub_id: str, request: Request, _=Depends(require_au
     async with SUBS_LOCK:
         if sub_id not in SUBS:
             raise HTTPException(status_code=404, detail="sub not found")
+        target_sub = SUBS[sub_id]
+    if action == "add":
+        async with LINKS_LOCK:
+            link = LINKS.get(link_id)
+        if link is None:
+            raise HTTPException(status_code=404, detail="link not found")
+        try:
+            validate_raw_tcp_multi_location(link, target_sub.get("multi_location"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    async with SUBS_LOCK:
         s = SUBS[sub_id]
         ids = s.setdefault("link_ids", [])
         if action == "add":
@@ -1312,6 +1414,8 @@ async def make_link(
     remark: str = "",
     sub_id: str | None = None,
     protocol: str = DEFAULT_PROTOCOL,
+    transport_settings: object = None,
+    security: object = "tls",
     fingerprint: str = DEFAULT_FINGERPRINT,
     alpn: str = "",
     port: int = DEFAULT_PORT,
@@ -1322,8 +1426,30 @@ async def make_link(
     exit_proxy_mode: str = "direct", proxy_id: str = "", custom_proxy: str = "",
     requested_uuid: str = "",
 ) -> tuple[str, dict]:
-    if protocol not in PROTOCOLS:
-        protocol = DEFAULT_PROTOCOL
+    protocol, transport_settings = TRANSPORTS.validate(protocol, transport_settings)
+    TRANSPORTS.validate_security(protocol, security)
+    if protocol == "vless-tcp":
+        if str(address or "").strip() or str(sni or "").strip() or str(alpn or "").strip():
+            raise ValueError(
+                "Raw TCP endpoint, SNI, and ALPN are managed by the verified deployment"
+            )
+        if port not in (None, DEFAULT_PORT):
+            raise ValueError("Raw TCP port is assigned by the Railway TCP Proxy")
+        # Persist no accidental WebSocket endpoint fields on a Raw TCP record.
+        address = sni = alpn = ""
+        port = DEFAULT_PORT
+        if sub_id:
+            sub = SUBS.get(sub_id)
+            ml = sub.get("multi_location") if isinstance(sub, dict) else None
+            validate_raw_tcp_multi_location(
+                {
+                    "protocol": protocol,
+                    "address": address,
+                    "port": port,
+                    "sni": sni,
+                },
+                ml,
+            )
     fingerprint = (fingerprint or DEFAULT_FINGERPRINT).strip().lower()
     if fingerprint not in FINGERPRINTS:
         fingerprint = DEFAULT_FINGERPRINT
@@ -1348,6 +1474,7 @@ async def make_link(
             "is_default": False,
             "sub_id": sub_id,
             "protocol": protocol,
+            "transport_settings": transport_settings,
             "fingerprint": fingerprint,
             "alpn": (alpn or "").strip()[:100],
             "port": port,
@@ -1488,6 +1615,33 @@ def multi_location_for_link(link: dict | None) -> tuple[dict | None, dict | None
     return sub, ml
 
 
+def validate_raw_tcp_multi_location(link: dict | None, ml: dict | None) -> None:
+    """Require an explicit deployment SNI for every Raw TCP location.
+
+    This is validation only: it neither changes country/proxy mappings nor
+    resolves an endpoint. The relay still performs the exact location →
+    proxy_id lookup for every session and fails closed if it cannot do so.
+    """
+    if (
+        not isinstance(link, dict)
+        or link.get("protocol", DEFAULT_PROTOCOL) != "vless-tcp"
+        or not isinstance(ml, dict)
+        or not ml.get("enabled")
+    ):
+        return
+    for location in ml.get("locations") or []:
+        if not location.get("active"):
+            continue
+        TRANSPORTS.endpoint(
+            "vless-tcp",
+            address=link.get("address"),
+            port=link.get("port"),
+            sni=link.get("sni"),
+            fallback_host="",
+            location_id=location.get("id"),
+        )
+
+
 async def resolve_exit_selection(link: dict | None, loc_id: str = "") -> dict | None:
     """Resolve one stable proxy ID to one endpoint; never choose or substitute."""
     if not isinstance(link, dict):
@@ -1563,6 +1717,16 @@ async def set_link_sub(uid: str, sub_id: str | None) -> bool:
         async with SUBS_LOCK:
             if sub_id not in SUBS:
                 return False
+            target_sub = SUBS[sub_id]
+    else:
+        target_sub = None
+    if target_sub is not None:
+        async with LINKS_LOCK:
+            link = LINKS.get(uid)
+        try:
+            validate_raw_tcp_multi_location(link, target_sub.get("multi_location"))
+        except ValueError:
+            return False
     async with SUBS_LOCK:
         if old_sub and old_sub in SUBS:
             ids = SUBS[old_sub].get("link_ids", [])
@@ -1610,6 +1774,15 @@ async def api_config_endpoints(request: Request, _=Depends(require_auth)):
 
 
 # ── Version updates ───────────────────────────────────────────────────────────
+@app.get("/api/transports")
+async def transport_capabilities(_=Depends(require_auth)):
+    """Safe, authoritative capability data for the transport-management UI."""
+    return {
+        "runtime": "native FastAPI/Uvicorn VLESS WebSocket relay",
+        "transports": TRANSPORTS.capabilities(),
+    }
+
+
 @app.get("/api/update/setup")
 async def update_setup_status(_=Depends(require_auth)):
     return updater.setup_status()
@@ -1646,11 +1819,23 @@ async def create_link(request: Request, _=Depends(require_auth)):
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="invalid body")
     host = get_host(request)
-    try:
-        selected_address = normalize_address(body.get("address") or host)
-        selected_sni = normalize_sni(body["sni"]) if str(body.get("sni") or "").strip() else ""
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    requested_protocol = body["protocol"] if "protocol" in body else DEFAULT_PROTOCOL
+    if requested_protocol == "vless-tcp":
+        if any(
+            str(body.get(name) or "").strip()
+            for name in ("address", "sni", "alpn", "port")
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Raw TCP endpoint, SNI, ALPN, and port are managed by the verified deployment",
+            )
+        selected_address = selected_sni = ""
+    else:
+        try:
+            selected_address = normalize_address(body.get("address") or host)
+            selected_sni = normalize_sni(body["sni"]) if str(body.get("sni") or "").strip() else ""
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     lv = float(body.get("limit_value") or 0)
     lu = body.get("limit_unit") or "GB"
     limit_bytes = 0 if lv <= 0 else parse_size_to_bytes(lv, lu)
@@ -1684,7 +1869,9 @@ async def create_link(request: Request, _=Depends(require_auth)):
         note=body.get("note") or "",
         remark=body.get("remark") or body.get("label") or "Lumen Relay",
         sub_id=body.get("sub_id") or None,
-        protocol=body.get("protocol") or DEFAULT_PROTOCOL,
+        protocol=requested_protocol,
+        transport_settings=body.get("transport_settings"),
+        security=body.get("security", "tls"),
         fingerprint=body.get("fingerprint") or DEFAULT_FINGERPRINT,
         alpn=body.get("alpn") or "",
         port=port,
@@ -1726,7 +1913,7 @@ async def list_links(request: Request, _=Depends(require_auth)):
             **d,
             "protocol": proto, "exit_proxy": summary, "multi_location": ml_info,
             "expired": is_link_expired(d),
-            "vless_link": vless_link_for_link(d, uid, host),
+            "vless_link": safe_vless_link_for_link(d, uid, host),
             "sub_url": "https://" + host + "/sub/" + str(uid),
             "connected_ips": len(unique_ips_for_uuid(uid)),
         })
@@ -1737,6 +1924,55 @@ async def list_links(request: Request, _=Depends(require_auth)):
 async def update_link(uid: str, request: Request, _=Depends(require_auth)):
     body = await request.json()
     selection=None
+    transport_update = None
+    current = LINKS.get(uid)
+    if current is None:
+        raise HTTPException(status_code=404, detail="link not found")
+    if "sub_id" in body and body.get("sub_id"):
+        requested_sub_id = str(body.get("sub_id"))
+        async with SUBS_LOCK:
+            requested_sub = SUBS.get(requested_sub_id)
+        if requested_sub is None:
+            raise HTTPException(status_code=404, detail="sub not found")
+        try:
+            validate_raw_tcp_multi_location(
+                current, requested_sub.get("multi_location")
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    if current.get("protocol", DEFAULT_PROTOCOL) == "vless-tcp" and any(
+        field in body for field in ("address", "sni", "alpn", "port")
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Raw TCP endpoint, SNI, ALPN, and port are managed by the verified deployment",
+        )
+    if "protocol" in body or "transport_settings" in body:
+        requested_protocol = body.get(
+            "protocol", current.get("protocol", DEFAULT_PROTOCOL)
+        )
+        requested_settings = body.get(
+            "transport_settings", current.get("transport_settings")
+        )
+        try:
+            protocol, settings = TRANSPORTS.validate(
+                requested_protocol, requested_settings
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if protocol != current.get("protocol", DEFAULT_PROTOCOL):
+            raise HTTPException(
+                status_code=400,
+                detail="Transport cannot be changed after a config is created",
+            )
+        transport_update = (protocol, settings)
+    if "security" in body:
+        try:
+            TRANSPORTS.validate_security(
+                current.get("protocol", DEFAULT_PROTOCOL), body.get("security")
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     if any(k in body for k in ("exit_proxy_mode","proxy_id","custom_proxy")):
         cur=LINKS.get(uid,{})
         try:
@@ -1805,8 +2041,10 @@ async def update_link(uid: str, request: Request, _=Depends(require_auth)):
                 link["sni"] = normalize_sni(body["sni"]) if str(body.get("sni") or "").strip() else ""
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc))
+        if transport_update is not None:
+            link["protocol"], link["transport_settings"] = transport_update
         if selection is not None: link["exit_proxy_mode"],link["proxy_id"],link["custom_proxy"]=selection
-        if any(k in body for k in ("label", "note", "remark", "limit_value", "expires_days", "fingerprint", "alpn", "port", "ip_limit", "speed_limit_value", "address", "sni", "exit_proxy_mode", "proxy_id", "custom_proxy")):
+        if any(k in body for k in ("label", "note", "remark", "limit_value", "expires_days", "protocol", "transport_settings", "fingerprint", "alpn", "port", "ip_limit", "speed_limit_value", "address", "sni", "exit_proxy_mode", "proxy_id", "custom_proxy")):
             log_activity("link", f"کانفیگ «{link['label']}» ویرایش شد", "info")
         new_sub = body.get("sub_id", "UNCHANGED")
         if new_sub != "UNCHANGED":
@@ -1919,7 +2157,14 @@ async def public_sub_data(uuid_key: str, request: Request):
         conn_count = sum(1 for c in connections.values() if c.get("uuid") == lid)
         active_conns += conn_count
         proto = link.get("protocol", DEFAULT_PROTOCOL)
-        entries = vless_entries_for_link(link, lid, host)
+        # Preserve the existing inactive-link display behavior, but never
+        # serialize a persisted Raw TCP record whose deployment capability or
+        # location-SNI map is no longer valid.
+        entries = (
+            []
+            if proto == "vless-tcp" and not allowed
+            else vless_entries_for_link(link, lid, host)
+        )
         for entry in entries:
             links_out.append({
                 "uuid": lid,

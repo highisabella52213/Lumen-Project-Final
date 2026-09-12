@@ -8,7 +8,8 @@ names={'_state_payload','_validate_state','_snapshot_encode','_snapshot_decode',
 nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names]
 import secrets as _secrets
 import countries as _countries
-ns=dict(asyncio=asyncio,base64=base64,hashlib=hashlib,hmac=hmac,json=json,logging=logging,os=os,shutil=shutil,zlib=zlib,datetime=datetime,Path=Path,logger=logging.getLogger('state-test'),LINKS={},SUBS={},PROXY_TEST_RESULTS={},AUTH={'password_hash':'hash'},CONFIG={'secret':'stable-test-secret'},DEFAULT_PROTOCOL='vless-ws',STATE_SNAPSHOT_ENV='LUMEN_STATE_SNAPSHOT_B64',SAVE_LOCK=asyncio.Lock(),secrets=_secrets,countries=_countries,sanitize_proxy_test_result=lambda _pid,value:value if isinstance(value,dict) and value.get('proxy_id')==_pid else None)
+from transports import TRANSPORTS
+ns=dict(asyncio=asyncio,base64=base64,hashlib=hashlib,hmac=hmac,json=json,logging=logging,os=os,shutil=shutil,zlib=zlib,datetime=datetime,Path=Path,logger=logging.getLogger('state-test'),LINKS={},SUBS={},PROXY_TEST_RESULTS={},AUTH={'password_hash':'hash'},CONFIG={'secret':'stable-test-secret'},DEFAULT_PROTOCOL='vless-ws',STATE_SNAPSHOT_ENV='LUMEN_STATE_SNAPSHOT_B64',SAVE_LOCK=asyncio.Lock(),secrets=_secrets,countries=_countries,TRANSPORTS=TRANSPORTS,sanitize_proxy_test_result=lambda _pid,value:value if isinstance(value,dict) and value.get('proxy_id')==_pid else None)
 exec(compile(ast.Module(body=nodes,type_ignores=[]),str(source_path),'exec'),ns)
 async def run():
  with tempfile.TemporaryDirectory() as d:
